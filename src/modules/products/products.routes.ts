@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
+import { routeParam } from '../../lib/route-param';
 
 export const productsRouter = Router();
 
@@ -83,7 +84,7 @@ productsRouter.get('/categories', asyncHandler(async (_req, res) => {
 productsRouter.get('/:slug', asyncHandler(async (req, res) => {
   const vehicleVariantId = typeof req.query.vehicleVariantId === 'string' ? req.query.vehicleVariantId : undefined;
   const product = await prisma.product.findFirst({
-    where: { slug: req.params.slug, status: 'ACTIVE' },
+    where: { slug: routeParam(req.params.slug, 'slug'), status: 'ACTIVE' },
     include: {
       category: true,
       images: { orderBy: { position: 'asc' } },
@@ -107,14 +108,14 @@ productsRouter.get('/:slug', asyncHandler(async (req, res) => {
 
 productsRouter.get('/:id/fitment/:vehicleVariantId', asyncHandler(async (req, res) => {
   const product = await prisma.product.findUnique({
-    where: { id: req.params.id },
+    where: { id: routeParam(req.params.id, 'id') },
     select: { id: true, name: true, requiresFitment: true, isUniversal: true },
   });
   if (!product) throw new HttpError(404, 'Product not found');
   if (product.isUniversal || !product.requiresFitment) return res.json({ compatible: true, reason: 'Universal fitment' });
 
   const match = await prisma.productFitment.findUnique({
-    where: { productId_vehicleVariantId: { productId: req.params.id, vehicleVariantId: req.params.vehicleVariantId } },
+    where: { productId_vehicleVariantId: { productId: routeParam(req.params.id, 'id'), vehicleVariantId: routeParam(req.params.vehicleVariantId, 'vehicleVariantId') } },
   });
   res.json({ compatible: Boolean(match), notes: match?.notes ?? null });
 }));

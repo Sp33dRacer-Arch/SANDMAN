@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
+import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 
 export const garageRouter = Router();
@@ -43,7 +44,7 @@ garageRouter.post('/', asyncHandler(async (req, res) => {
 }));
 
 garageRouter.patch('/:id/primary', asyncHandler(async (req, res) => {
-  const own = await prisma.garageVehicle.findFirst({ where: { id: req.params.id, userId: req.auth!.userId } });
+  const own = await prisma.garageVehicle.findFirst({ where: { id: routeParam(req.params.id, 'id'), userId: req.auth!.userId } });
   if (!own) throw new HttpError(404, 'Garage vehicle not found');
   await prisma.$transaction([
     prisma.garageVehicle.updateMany({ where: { userId: req.auth!.userId }, data: { isPrimary: false } }),
@@ -53,7 +54,7 @@ garageRouter.patch('/:id/primary', asyncHandler(async (req, res) => {
 }));
 
 garageRouter.delete('/:id', asyncHandler(async (req, res) => {
-  const result = await prisma.garageVehicle.deleteMany({ where: { id: req.params.id, userId: req.auth!.userId } });
+  const result = await prisma.garageVehicle.deleteMany({ where: { id: routeParam(req.params.id, 'id'), userId: req.auth!.userId } });
   if (!result.count) throw new HttpError(404, 'Garage vehicle not found');
   res.status(204).send();
 }));

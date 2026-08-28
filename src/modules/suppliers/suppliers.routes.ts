@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
+import { routeParam } from '../../lib/route-param';
 import { requireAuth, requireRole } from '../../middleware/auth';
 import { supplierAdapterFor } from '../../services/supplier-registry';
 
@@ -18,7 +19,7 @@ suppliersRouter.get('/', asyncHandler(async (_req, res) => {
 
 suppliersRouter.post('/fulfillments/:id/refresh', asyncHandler(async (req, res) => {
   const fulfillment = await prisma.fulfillment.findUnique({
-    where: { id: req.params.id },
+    where: { id: routeParam(req.params.id, 'id') },
     include: { supplier: true },
   });
   if (!fulfillment) throw new HttpError(404, 'Fulfillment not found');

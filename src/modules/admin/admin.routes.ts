@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
+import { routeParam } from '../../lib/route-param';
 import { requireAuth, requireRole } from '../../middleware/auth';
 import { submitPaidOrderToSuppliers } from '../../services/fulfillment.service';
 
@@ -147,7 +148,7 @@ adminRouter.get('/products', asyncHandler(async (req, res) => {
 
 adminRouter.get('/products/:id', asyncHandler(async (req, res) => {
   const product = await prisma.product.findUnique({
-    where: { id: req.params.id },
+    where: { id: routeParam(req.params.id, 'id') },
     include: {
       category: true,
       images: { orderBy: { position: 'asc' } },
@@ -192,12 +193,12 @@ adminRouter.post('/products', asyncHandler(async (req, res) => {
 
 adminRouter.patch('/products/:id', asyncHandler(async (req, res) => {
   const data = productSchema.omit({ images: true }).partial().parse(req.body);
-  const product = await prisma.product.update({ where: { id: req.params.id }, data });
+  const product = await prisma.product.update({ where: { id: routeParam(req.params.id, 'id') }, data });
   res.json(product);
 }));
 
 adminRouter.delete('/products/:id', asyncHandler(async (req, res) => {
-  await prisma.product.update({ where: { id: req.params.id }, data: { status: 'ARCHIVED' } });
+  await prisma.product.update({ where: { id: routeParam(req.params.id, 'id') }, data: { status: 'ARCHIVED' } });
   res.status(204).send();
 }));
 
@@ -247,7 +248,7 @@ adminRouter.get('/orders', asyncHandler(async (req, res) => {
 
 adminRouter.get('/orders/:id', asyncHandler(async (req, res) => {
   const order = await prisma.order.findUnique({
-    where: { id: req.params.id },
+    where: { id: routeParam(req.params.id, 'id') },
     include: {
       items: true,
       fulfillments: { include: { supplier: true } },
@@ -260,7 +261,7 @@ adminRouter.get('/orders/:id', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.post('/orders/:id/mark-paid', asyncHandler(async (req, res) => {
-  const order = await prisma.order.findUnique({ where: { id: req.params.id } });
+  const order = await prisma.order.findUnique({ where: { id: routeParam(req.params.id, 'id') } });
   if (!order) throw new HttpError(404, 'Order not found');
   await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'PAID', status: 'PAID' } });
   await prisma.orderEvent.create({ data: { orderId: order.id, type: 'ADMIN_MARKED_PAID', message: 'Order manually marked paid by staff' } });
@@ -270,7 +271,7 @@ adminRouter.post('/orders/:id/mark-paid', asyncHandler(async (req, res) => {
 
 adminRouter.patch('/orders/:id/status', asyncHandler(async (req, res) => {
   const data = z.object({ status: z.enum(['PENDING_PAYMENT', 'PAID', 'PROCESSING', 'SUBMITTED_TO_SUPPLIER', 'PARTIALLY_FULFILLED', 'FULFILLED', 'CANCELLED', 'REFUNDED', 'FAILED']) }).parse(req.body);
-  const order = await prisma.order.update({ where: { id: req.params.id }, data: { status: data.status } });
+  const order = await prisma.order.update({ where: { id: routeParam(req.params.id, 'id') }, data: { status: data.status } });
   await prisma.orderEvent.create({ data: { orderId: order.id, type: 'ADMIN_STATUS_CHANGED', message: `Order status changed to ${data.status}` } });
   res.json(order);
 }));
@@ -347,14 +348,14 @@ adminRouter.post('/products/:id/fitments', asyncHandler(async (req, res) => {
     notes: z.string().max(500).optional(),
   }).parse(req.body);
   await prisma.productFitment.createMany({
-    data: data.vehicleVariantIds.map(vehicleVariantId => ({ productId: req.params.id, vehicleVariantId, notes: data.notes })),
+    data: data.vehicleVariantIds.map(vehicleVariantId => ({ productId: routeParam(req.params.id, 'id'), vehicleVariantId, notes: data.notes })),
     skipDuplicates: true,
   });
   res.status(201).json({ success: true, count: data.vehicleVariantIds.length });
 }));
 
 adminRouter.delete('/products/:id/fitments/:vehicleVariantId', asyncHandler(async (req, res) => {
-  await prisma.productFitment.deleteMany({ where: { productId: req.params.id, vehicleVariantId: req.params.vehicleVariantId } });
+  await prisma.productFitment.deleteMany({ where: { productId: routeParam(req.params.id, 'id'), vehicleVariantId: routeParam(req.params.vehicleVariantId, 'vehicleVariantId') } });
   res.status(204).send();
 }));
 
@@ -376,7 +377,7 @@ adminRouter.patch('/suppliers/:id', asyncHandler(async (req, res) => {
     priority: z.number().int().min(1).optional(),
     baseUrl: z.string().url().nullable().optional(),
   }).parse(req.body);
-  res.json(await prisma.supplier.update({ where: { id: req.params.id }, data }));
+  res.json(await prisma.supplier.update({ where: { id: routeParam(req.params.id, 'id') }, data }));
 }));
 
 adminRouter.get('/supplier-products', asyncHandler(async (req, res) => {
@@ -411,7 +412,7 @@ adminRouter.patch('/supplier-products/:id', asyncHandler(async (req, res) => {
     stock: z.number().int().nonnegative().nullable().optional(),
     active: z.boolean().optional(),
   }).parse(req.body);
-  res.json(await prisma.supplierProduct.update({ where: { id: req.params.id }, data }));
+  res.json(await prisma.supplierProduct.update({ where: { id: routeParam(req.params.id, 'id') }, data }));
 }));
 
 adminRouter.get('/fulfillments', asyncHandler(async (req, res) => {

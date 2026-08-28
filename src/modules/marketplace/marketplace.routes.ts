@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
+import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 
 export const marketplaceRouter = Router();
@@ -136,7 +137,7 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
 
 marketplaceRouter.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
   const existing = await prisma.product.findFirst({
-    where: { id: req.params.id, sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
+    where: { id: routeParam(req.params.id, 'id'), sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
   });
   if (!existing) throw new HttpError(404, 'Listing not found');
 
@@ -147,7 +148,7 @@ marketplaceRouter.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
 
 marketplaceRouter.delete('/:id', requireAuth, asyncHandler(async (req, res) => {
   const existing = await prisma.product.findFirst({
-    where: { id: req.params.id, sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
+    where: { id: routeParam(req.params.id, 'id'), sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
   });
   if (!existing) throw new HttpError(404, 'Listing not found');
   await prisma.product.update({ where: { id: existing.id }, data: { status: 'ARCHIVED' } });
@@ -161,7 +162,7 @@ marketplaceRouter.post('/sales/:orderItemId/ship', requireAuth, asyncHandler(asy
   }).parse(req.body);
 
   const item = await prisma.orderItem.findFirst({
-    where: { id: req.params.orderItemId, sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
+    where: { id: routeParam(req.params.orderItemId, 'orderItemId'), sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
   });
   if (!item) throw new HttpError(404, 'Sale item not found');
 

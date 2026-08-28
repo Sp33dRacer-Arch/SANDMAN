@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
+import { routeParam } from '../../lib/route-param';
 
 export const vehiclesRouter = Router();
 
@@ -38,7 +39,7 @@ vehiclesRouter.get('/variants', asyncHandler(async (req, res) => {
 
 vehiclesRouter.get('/variants/:id', asyncHandler(async (req, res) => {
   const variant = await prisma.vehicleVariant.findUnique({
-    where: { id: req.params.id },
+    where: { id: routeParam(req.params.id, 'id') },
     include: { model: { include: { make: true } } },
   });
   if (!variant) throw new HttpError(404, 'Vehicle variant not found');

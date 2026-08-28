@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
+import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 
 export const cartRouter = Router();
@@ -85,7 +86,7 @@ cartRouter.post('/items', asyncHandler(async (req, res) => {
 cartRouter.patch('/items/:id', asyncHandler(async (req, res) => {
   const { quantity } = z.object({ quantity: z.number().int().min(1).max(20) }).parse(req.body);
   const item = await prisma.cartItem.findFirst({
-    where: { id: req.params.id, cart: { userId: req.auth!.userId } },
+    where: { id: routeParam(req.params.id, 'id'), cart: { userId: req.auth!.userId } },
     include: { product: true },
   });
   if (!item) throw new HttpError(404, 'Cart item not found');
@@ -97,7 +98,7 @@ cartRouter.patch('/items/:id', asyncHandler(async (req, res) => {
 }));
 
 cartRouter.delete('/items/:id', asyncHandler(async (req, res) => {
-  const deleted = await prisma.cartItem.deleteMany({ where: { id: req.params.id, cart: { userId: req.auth!.userId } } });
+  const deleted = await prisma.cartItem.deleteMany({ where: { id: routeParam(req.params.id, 'id'), cart: { userId: req.auth!.userId } } });
   if (!deleted.count) throw new HttpError(404, 'Cart item not found');
   res.status(204).send();
 }));

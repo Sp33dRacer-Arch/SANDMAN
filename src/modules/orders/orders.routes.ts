@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
+import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 import { env } from '../../config/env';
 import { dollarsToCents, calculateOrderTotals } from '../../lib/money';
@@ -179,7 +180,7 @@ ordersRouter.get('/', asyncHandler(async (req, res) => {
 
 ordersRouter.get('/:orderNumber', asyncHandler(async (req, res) => {
   const order = await prisma.order.findFirst({
-    where: { orderNumber: req.params.orderNumber, userId: req.auth!.userId },
+    where: { orderNumber: routeParam(req.params.orderNumber, 'orderNumber'), userId: req.auth!.userId },
     include: { items: true, fulfillments: true, events: { orderBy: { createdAt: 'desc' } } },
   });
   if (!order) throw new HttpError(404, 'Order not found');
