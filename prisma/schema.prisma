@@ -54,7 +54,16 @@ enum FulfillmentStatus {
 enum SupplierType {
   MOCK
   CJ
+  SYNCEE
   CUSTOM
+}
+
+enum PayoutStatus {
+  PENDING
+  READY
+  PAID
+  FAILED
+  BLOCKED
 }
 
 enum AddressType {
@@ -90,6 +99,28 @@ model User {
   cart         Cart?
   orders       Order[]
   marketplaceProducts Product[] @relation("MarketplaceSeller")
+  sessions            AuthSession[]
+  sellerPayouts       SellerPayout[]
+  stripeConnectAccountId String?  @unique
+  stripeConnectChargesEnabled Boolean @default(false)
+  stripeConnectPayoutsEnabled Boolean @default(false)
+  sellerCommissionAcceptedAt DateTime?
+  sellerCountry       String?
+}
+
+model AuthSession {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  lastUsedAt DateTime @default(now())
+  userAgent  String?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
 }
 
 model Address {
@@ -331,12 +362,16 @@ model Order {
   shippingAddress        Json
   billingAddress         Json?
   stripePaymentIntentId  String?           @unique
+  paypalOrderId          String?           @unique
+  paymentProvider        String?
   customerNote           String?
   internalNote           String?
+  marketplaceStockReleasedAt DateTime?
   user                   User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
   items                  OrderItem[]
   fulfillments           Fulfillment[]
   events                 OrderEvent[]
+  sellerPayouts          SellerPayout[]
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
@@ -363,10 +398,34 @@ model OrderItem {
   sellerTrackingNumber String?
   sellerCarrier       String?
   sellerShippedAt     DateTime?
+  sellerShippingCents Int @default(0)
+  platformFeeCents    Int @default(0)
+  sellerPayoutCents   Int?
   order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   product             Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([orderId])
+}
+
+model SellerPayout {
+  id                String       @id @default(cuid())
+  orderId           String
+  sellerId          String
+  amountCents       Int
+  platformFeeCents  Int
+  currency          String       @default("USD")
+  status            PayoutStatus @default(PENDING)
+  stripeTransferId  String?      @unique
+  errorMessage      String?
+  paidAt            DateTime?
+  readyAt           DateTime?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  order             Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  seller            User         @relation(fields: [sellerId], references: [id], onDelete: Restrict)
+
+  @@unique([orderId, sellerId])
+  @@index([sellerId, status])
 }
 
 model Fulfillment {
@@ -388,6 +447,7 @@ model Fulfillment {
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
+  @@unique([orderId, supplierId])
   @@index([orderId])
   @@index([supplierId, status])
 }

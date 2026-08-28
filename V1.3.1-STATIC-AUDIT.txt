@@ -1,0 +1,30 @@
+SANDMAN V1.3.1 STATIC AUDIT
+===========================
+
+Result: PASS (0 static issues found in the final packaged source)
+
+Checks run in the build workspace:
+- 38 TypeScript files parsed with the TypeScript compiler parser: 0 parser errors
+- public/store/app.js: node --check PASS
+- public/admin/app.js: node --check PASS
+- Relative TypeScript import resolution: PASS
+- JSON parsing: PASS
+- SVG favicon parsing: PASS
+- Environment variable references vs src/config/env.ts: PASS
+- Prisma schema structural scan: PASS
+- No localStorage/sessionStorage access-token persistence: PASS
+- Critical V1.3.1 hardening markers: PASS
+
+Important limitation:
+The build workspace does not have the npm dependency cache required to run a genuine
+`npm install`, Prisma Client generation, database integration tests, or real
+Stripe/PayPal/Syncee network calls. Run the following in the real SANDMAN folder
+before pushing to Railway:
+
+npm install
+npx prisma generate
+npm run typecheck
+npm test
+npm run build
+
+Only deploy if all five commands complete successfully.

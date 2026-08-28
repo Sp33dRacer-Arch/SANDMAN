@@ -5,10 +5,11 @@
   const $$ = (s, root = document) => [...root.querySelectorAll(s)];
   const app = $('#app');
   const state = {
-    token: localStorage.getItem('sandman_token') || '',
+    token: '',
     user: null,
     cart: null,
     categories: [],
+    paymentConfig: null,
     toastTimer: null,
   };
 
@@ -23,23 +24,49 @@
     return { path: path || '', params: new URLSearchParams(query) };
   };
 
-  async function api(path, options = {}) {
+  async function refreshSession() {
+    try {
+      const res = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
+      if (!res.ok) return false;
+      const data = await res.json();
+      setToken(data.token, data.user);
+      return true;
+    } catch { return false; }
+  }
+
+  async function api(path, options = {}, retry = true) {
     const headers = { ...(options.headers || {}) };
     if (!(options.body instanceof FormData)) headers['Content-Type'] = 'application/json';
     if (state.token) headers.Authorization = `Bearer ${state.token}`;
-    const res = await fetch(`/api${path}`, { ...options, headers });
+    const res = await fetch(`/api${path}`, { ...options, headers, credentials: 'same-origin' });
     let data = null;
     const text = await res.text();
     if (text) {
       try { data = JSON.parse(text); } catch { data = text; }
     }
+    if (res.status === 401 && retry && !path.startsWith('/auth/login') && !path.startsWith('/auth/register') && !path.startsWith('/auth/refresh')) {
+      if (await refreshSession()) return api(path, options, false);
+    }
     if (!res.ok) {
-      const message = data?.error || data?.message || `Request failed (${res.status})`;
+      const message = data?.error?.message || data?.error || data?.message || `Request failed (${res.status})`;
       const err = new Error(message);
       err.status = res.status;
       throw err;
     }
     return data;
+  }
+
+  function loadExternalScript(src, globalName) {
+    if (globalName && window[globalName]) return Promise.resolve(window[globalName]);
+    return new Promise((resolve, reject) => {
+      const existing = [...document.scripts].find(script => script.src === src);
+      if (existing) { existing.addEventListener('load', () => resolve(globalName ? window[globalName] : true), { once: true }); return; }
+      const script = document.createElement('script');
+      script.src = src; script.async = true;
+      script.onload = () => resolve(globalName ? window[globalName] : true);
+      script.onerror = () => reject(new Error('Could not load secure payment provider'));
+      document.head.appendChild(script);
+    });
   }
 
   function toast(message, type = '') {
@@ -53,8 +80,8 @@
   function setToken(token, user) {
     state.token = token || '';
     state.user = user || null;
-    if (state.token) localStorage.setItem('sandman_token', state.token);
-    else localStorage.removeItem('sandman_token');
+    // Access tokens remain memory-only. Persistent login comes from the
+    // Secure/HttpOnly refresh cookie, which JavaScript cannot steal.
     updateAccountButton();
   }
 
@@ -65,6 +92,7 @@
   }
 
   async function hydrateUser() {
+    if (!state.token) await refreshSession();
     if (!state.token) return;
     try {
       state.user = await api('/auth/me');
@@ -335,13 +363,20 @@
       $('#sellLogin').addEventListener('click', () => openAuth('login'));
       return;
     }
-    app.innerHTML = `<div class="form-page"><div class="form-layout"><aside class="form-intro"><span class="eyebrow">SELL / MARKETPLACE</span><h1>List an engine part.</h1><p>Keep the listing accurate. Buyers should be able to understand exactly what the part is, its condition and what arrives in the box.</p><div class="sell-steps"><div class="sell-step"><span>01</span><strong>Describe the exact part</strong></div><div class="sell-step"><span>02</span><strong>Set price + condition</strong></div><div class="sell-step"><span>03</span><strong>Add image links + location</strong></div><div class="sell-step"><span>04</span><strong>Publish to SANDMAN</strong></div></div></aside>
+
+    const sellerConfig = await api('/marketplace/seller-config');
+    if (!sellerConfig.stripeConnectConfigured || !sellerConfig.payoutsEnabled) {
+      app.innerHTML = `<div class="form-page"><div class="form-layout"><aside class="form-intro"><span class="eyebrow">SELL / PAYOUT SETUP</span><h1>Connect payouts first.</h1><p>SANDMAN uses Stripe Connect so buyers can pay once, SANDMAN keeps ${esc(sellerConfig.commissionPercent)}%, and your net sale proceeds are routed to your verified payout account.</p></aside><div class="market-form"><div class="empty-state"><h3>${sellerConfig.stripeConnectConfigured ? 'Finish seller payout onboarding.' : 'Seller payouts are not configured yet.'}</h3><p>${sellerConfig.stripeConnectConfigured ? 'Open your seller dashboard and connect/verify your payout account before publishing.' : 'The SANDMAN owner needs to configure Stripe + Connect before marketplace sellers can list.'}</p><a class="primary-btn" href="#/seller">Seller payout settings</a></div></div></div></div>`;
+      return;
+    }
+
+    app.innerHTML = `<div class="form-page"><div class="form-layout"><aside class="form-intro"><span class="eyebrow">SELL / MARKETPLACE</span><h1>List an engine part.</h1><p>Keep the listing accurate. Buyers should understand exactly what the part is, its condition and what arrives in the box.</p><div class="commission-box"><span>SANDMAN FEE</span><strong>${esc(sellerConfig.commissionPercent)}%</strong><p>Commission is calculated on the merchandise sale price. Your listing's shipping charge is passed through to your seller payout.</p></div><div class="sell-steps"><div class="sell-step"><span>01</span><strong>Describe the exact part</strong></div><div class="sell-step"><span>02</span><strong>Set price + condition</strong></div><div class="sell-step"><span>03</span><strong>Add image + location</strong></div><div class="sell-step"><span>04</span><strong>Accept fee + publish</strong></div></div></aside>
       <form class="market-form" id="sellForm">
-        <div class="form-section"><h3>Part information</h3><label>Listing title<input name="name" required minlength="3" placeholder="e.g. Garrett GTX3582R Turbo"></label><div class="field-row"><label>Brand<input name="brand" placeholder="Garrett"></label><label>Manufacturer part number<input name="manufacturerPn" placeholder="Optional"></label></div><label>Category<select name="categoryId" required><option value="">Choose category</option>${state.categories.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label><label>Description<textarea name="description" required minlength="20" placeholder="Condition, history, included hardware, measurements, known issues, application notes..."></textarea></label></div>
-        <div class="form-section"><h3>Price & condition</h3><div class="field-row three"><label>Price (USD)<input name="price" type="number" step="0.01" min="1" required placeholder="250.00"></label><label>Condition<select name="condition"><option>USED</option><option>NEW</option><option>REMANUFACTURED</option><option value="OPEN_BOX">OPEN BOX</option></select></label><label>Quantity<input name="stockQuantity" type="number" min="1" max="1000" value="1" required></label></div><div class="field-row"><label>Shipping (USD)<input name="shipping" type="number" step="0.01" min="0" value="0"></label><label>Location<input name="sellerLocation" placeholder="Johannesburg, ZA"></label></div></div>
-        <div class="form-section"><h3>Images</h3><label>Primary image URL<input name="imageUrl" type="url" placeholder="https://..."></label><div class="upload-note">V1 accepts hosted image URLs so listings stay lightweight. Direct photo uploads can be added next with Cloudinary/S3 storage.</div></div>
-        <div class="form-section"><h3>Seller note</h3><label>Extra note<textarea name="sellerNotes" placeholder="Collection details, packaging note, preferred courier, etc." style="min-height:90px"></textarea></label></div>
-        <button class="primary-btn wide" type="submit">Publish listing</button><p class="form-note">Marketplace listings are published immediately in this development version. Production should add moderation, seller verification and payout controls.</p>
+        <div class="form-section"><h3>Part information</h3><label>Listing title<input name="name" required minlength="3" placeholder="e.g. Garrett GTX3582R turbo"></label><div class="field-row"><label>Brand<input name="brand" placeholder="Garrett"></label><label>Manufacturer part no.<input name="manufacturerPn" placeholder="Optional"></label></div><label>Description<textarea name="description" minlength="20" required placeholder="Condition, mileage, measurements, included hardware, known issues..."></textarea></label><label>Category<select name="categoryId" required><option value="">Choose category</option>${state.categories.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select></label></div>
+        <div class="form-section"><h3>Price + stock</h3><div class="field-row three"><label>Price (USD)<input name="price" type="number" step="0.01" min="1" required></label><label>Condition<select name="condition"><option>USED</option><option>NEW</option><option>REMANUFACTURED</option><option value="OPEN_BOX">OPEN BOX</option></select></label><label>Quantity<input name="stockQuantity" type="number" min="1" max="1000" value="1" required></label></div><div class="field-row"><label>Shipping (USD)<input name="shipping" type="number" step="0.01" min="0" value="0"></label><label>Location<input name="sellerLocation" placeholder="Johannesburg, ZA"></label></div></div>
+        <div class="form-section"><h3>Images</h3><label>Primary image URL<input name="imageUrl" type="url" placeholder="https://..."></label><div class="upload-note">Hosted image URLs are supported in this release.</div></div>
+        <div class="form-section"><h3>Seller agreement</h3><label class="commission-consent"><input name="commissionAccepted" type="checkbox" required><span>I agree that SANDMAN keeps ${esc(sellerConfig.commissionPercent)}% of the merchandise sale price as the marketplace fee. Seller payouts are handled through Stripe Connect.</span></label><label>Extra note<textarea name="sellerNotes" placeholder="Collection details, packaging note, preferred courier, etc." style="min-height:90px"></textarea></label></div>
+        <button class="primary-btn wide" type="submit">Publish listing</button>
       </form></div></div>`;
     $('#sellForm').addEventListener('submit', async e => {
       e.preventDefault(); const f = new FormData(e.currentTarget); const imageUrl = f.get('imageUrl')?.toString().trim();
@@ -352,6 +387,7 @@
         categoryId: f.get('categoryId')?.toString(), description: f.get('description')?.toString(), shortDesc: f.get('description')?.toString().slice(0, 320),
         priceCents: Math.round(Number(f.get('price')) * 100), condition, stockQuantity: Number(f.get('stockQuantity') || 1), sellerShippingCents: Math.round(Number(f.get('shipping') || 0) * 100),
         sellerLocation: f.get('sellerLocation')?.toString() || undefined, sellerNotes: f.get('sellerNotes')?.toString() || undefined,
+        commissionAccepted: f.get('commissionAccepted') === 'on',
         images: imageUrl ? [{ url:imageUrl, alt:f.get('name')?.toString(), position:0 }] : [],
       };
       const submit = e.currentTarget.querySelector('button[type=submit]'); submit.disabled = true; submit.textContent = 'Publishing…';
@@ -361,32 +397,50 @@
   }
 
   async function renderSeller() {
-    if (!state.token) return renderAccountRequired('Seller dashboard', 'Log in to manage your marketplace listings and sales.');
-    app.innerHTML = `<div class="dashboard-page"><div class="dashboard-head"><div><span class="eyebrow">SELLER / DASHBOARD</span><h1>Your market.</h1></div><a class="primary-btn" href="#/sell">New listing</a></div><div class="dashboard-grid"><nav class="dashboard-nav"><button class="active" data-tab="listings">Listings</button><button data-tab="sales">Sales</button><button data-tab="account">Account</button></nav><div class="dashboard-content" id="sellerContent"><div class="empty-state"><p>Loading seller data…</p></div></div></div></div>`;
+    if (!state.token) return renderAccountRequired('Seller dashboard', 'Log in to manage your marketplace listings, sales and payouts.');
+    app.innerHTML = `<div class="dashboard-page"><div class="dashboard-head"><div><span class="eyebrow">SELLER / DASHBOARD</span><h1>Your market.</h1></div><a class="primary-btn" href="#/sell">New listing</a></div><div class="dashboard-grid"><nav class="dashboard-nav"><button class="active" data-tab="listings">Listings</button><button data-tab="sales">Sales</button><button data-tab="payouts">Payouts</button><button data-tab="account">Account</button></nav><div class="dashboard-content" id="sellerContent"><div class="empty-state"><p>Loading seller data…</p></div></div></div></div>`;
     const show = async tab => {
       $$('.dashboard-nav button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
       const content = $('#sellerContent'); content.innerHTML = `<div class="empty-state"><p>Loading…</p></div>`;
-      if (tab === 'account') { content.innerHTML = accountPanel(); return; }
+      if (tab === 'account') { content.innerHTML = accountPanel(); $('#logoutButton')?.addEventListener('click', logout); bindAccountSecurity(content); return; }
       try {
         if (tab === 'listings') {
           const items = await api('/marketplace/mine');
           const active = items.filter(i => i.status === 'ACTIVE').length;
           content.innerHTML = `<div class="stat-cards"><div class="stat-card"><span>Listings</span><strong>${items.length}</strong></div><div class="stat-card"><span>Active</span><strong>${active}</strong></div><div class="stat-card"><span>Inventory units</span><strong>${items.reduce((n,i)=>n+(i.stockQuantity||0),0)}</strong></div></div>${items.length ? `<div class="data-list">${items.map(i => `<div class="data-row"><div>${imageOf(i)?`<img src="${esc(imageOf(i))}" alt="">`:'<div class="skeleton" style="width:58px;height:58px"></div>'}</div><div><strong>${esc(i.name)}</strong><small>${money(i.priceCents)} · ${titleCase(i.condition)}</small></div><span>${i.stockQuantity ?? 0} in stock</span><span class="status">${esc(i.status)}</span><button class="row-action" data-archive="${esc(i.id)}">Archive</button></div>`).join('')}</div>` : emptyProducts('Create your first marketplace listing.')}`;
           $$('[data-archive]').forEach(btn => btn.addEventListener('click', async () => { if (!confirm('Archive this listing?')) return; try { await api(`/marketplace/${btn.dataset.archive}`, { method:'DELETE' }); toast('Listing archived'); show('listings'); } catch(e){toast(e.message,'error');} }));
-        } else {
+        } else if (tab === 'sales') {
           const sales = await api('/marketplace/sales');
-          content.innerHTML = `<div class="stat-cards"><div class="stat-card"><span>Paid sale items</span><strong>${sales.length}</strong></div><div class="stat-card"><span>Gross sales</span><strong>${money(sales.reduce((n,i)=>n+i.totalPriceCents,0))}</strong></div><div class="stat-card"><span>Awaiting tracking</span><strong>${sales.filter(i=>!i.sellerTrackingNumber).length}</strong></div></div>${sales.length ? `<div class="data-list">${sales.map(i => `<div class="data-row"><div>${imageOf(i.product)?`<img src="${esc(imageOf(i.product))}" alt="">`:'<div class="skeleton" style="width:58px;height:58px"></div>'}</div><div><strong>${esc(i.name)}</strong><small>${esc(i.order.orderNumber)} · Qty ${i.quantity}</small></div><span>${money(i.totalPriceCents)}</span><span class="status">${i.sellerTrackingNumber ? 'Shipped' : 'Paid'}</span>${i.sellerTrackingNumber ? `<span class="row-action" style="cursor:default">${esc(i.sellerCarrier || '')}</span>` : `<button class="row-action" data-ship="${esc(i.id)}">Add tracking</button>`}</div>`).join('')}</div>` : emptyProducts('Paid marketplace sales appear here.')}`;
+          const gross = sales.reduce((n,i)=>n+i.totalPriceCents+(i.sellerShippingCents||0),0);
+          const fees = sales.reduce((n,i)=>n+(i.platformFeeCents||0),0);
+          content.innerHTML = `<div class="stat-cards"><div class="stat-card"><span>Paid sale items</span><strong>${sales.length}</strong></div><div class="stat-card"><span>Gross sales</span><strong>${money(gross)}</strong></div><div class="stat-card"><span>SANDMAN fees</span><strong>${money(fees)}</strong></div></div>${sales.length ? `<div class="data-list">${sales.map(i => `<div class="data-row"><div>${imageOf(i.product)?`<img src="${esc(imageOf(i.product))}" alt="">`:'<div class="skeleton" style="width:58px;height:58px"></div>'}</div><div><strong>${esc(i.name)}</strong><small>${esc(i.order.orderNumber)} · Qty ${i.quantity} · payout ${money(i.sellerPayoutCents||0)}</small></div><span>${money(i.totalPriceCents)}</span><span class="status">${i.sellerTrackingNumber ? 'Shipped' : 'Paid'}</span>${i.sellerTrackingNumber ? `<span class="row-action" style="cursor:default">${esc(i.sellerCarrier || '')}</span>` : `<button class="row-action" data-ship="${esc(i.id)}">Add tracking</button>`}</div>`).join('')}</div>` : emptyProducts('Paid marketplace sales appear here.')}`;
           $$('[data-ship]').forEach(btn => btn.addEventListener('click', async () => { const trackingNumber = prompt('Tracking number'); if (!trackingNumber) return; const carrier = prompt('Carrier', 'DHL') || 'Courier'; try { await api(`/marketplace/sales/${btn.dataset.ship}/ship`, {method:'POST',body:JSON.stringify({trackingNumber,carrier})}); toast('Tracking added'); show('sales'); } catch(e){toast(e.message,'error');} }));
+        } else if (tab === 'payouts') {
+          const [config, payout] = await Promise.all([api('/marketplace/seller-config'), api('/marketplace/payout/status')]);
+          content.innerHTML = `<div class="payout-panel"><span class="eyebrow">STRIPE CONNECT / SELLER PAYOUTS</span><h2>${payout.payoutsEnabled ? 'Payouts ready.' : payout.connected ? 'Finish verification.' : 'Connect your payout account.'}</h2><p>SANDMAN keeps <strong>${esc(config.commissionPercent)}%</strong> of marketplace merchandise sales. The remainder plus your listing shipping amount is transferred to your verified Stripe Connect account after a successful Stripe payment.</p><div class="payout-status"><span>Connected</span><strong>${payout.connected?'Yes':'No'}</strong><span>Payouts enabled</span><strong>${payout.payoutsEnabled?'Yes':'No'}</strong></div>${payout.requirementsDue?.length ? `<p class="form-note">Stripe still requires: ${esc(payout.requirementsDue.join(', '))}</p>`:''}${!payout.payoutsEnabled ? `<div class="field-row"><label>Seller country code<input id="sellerCountry" maxlength="2" value="${esc(config.sellerCountry || 'ZA')}" style="text-transform:uppercase"></label><button class="primary-btn" id="connectPayout">Connect / continue Stripe</button></div>` : `<button class="secondary-btn" id="openPayoutDashboard">Open Stripe payout dashboard</button>`}<p class="form-note">SANDMAN never stores your bank account or debit-card number. Stripe securely collects and stores payout details.</p></div>`;
+          $('#connectPayout')?.addEventListener('click', async () => { try { const result = await api('/marketplace/payout/onboard',{method:'POST',body:JSON.stringify({country:($('#sellerCountry').value||'ZA').toUpperCase()})}); location.href=result.url; } catch(e){toast(e.message,'error');} });
+          $('#openPayoutDashboard')?.addEventListener('click', async () => { try { const result = await api('/marketplace/payout/dashboard',{method:'POST'}); location.href=result.url; } catch(e){toast(e.message,'error');} });
         }
       } catch(e){content.innerHTML = emptyProducts(e.message);}
     };
     $$('.dashboard-nav button').forEach(b => b.addEventListener('click', () => show(b.dataset.tab)));
-    show('listings');
+    show(location.hash.includes('stripe=') ? 'payouts' : 'listings');
   }
 
   function accountPanel() {
     if (!state.user) return emptyProducts('Account unavailable.');
-    return `<div class="stat-cards"><div class="stat-card"><span>Name</span><strong style="font-size:24px">${esc(`${state.user.firstName||''} ${state.user.lastName||''}`.trim() || 'SANDMAN Member')}</strong></div><div class="stat-card"><span>Email</span><strong style="font-size:17px">${esc(state.user.email)}</strong></div><div class="stat-card"><span>Role</span><strong style="font-size:24px">${esc(titleCase(state.user.role))}</strong></div></div><button class="secondary-btn" id="logoutButton">Log out</button>`;
+    return `<div class="stat-cards"><div class="stat-card"><span>Name</span><strong style="font-size:24px">${esc(`${state.user.firstName||''} ${state.user.lastName||''}`.trim() || 'SANDMAN Member')}</strong></div><div class="stat-card"><span>Email</span><strong style="font-size:17px">${esc(state.user.email)}</strong></div><div class="stat-card"><span>Role</span><strong style="font-size:24px">${esc(titleCase(state.user.role))}</strong></div></div><div class="account-security"><span class="eyebrow">SECURITY</span><h3>Change password</h3><form id="accountPasswordForm"><div class="field-row"><label>Current password<input name="currentPassword" type="password" autocomplete="current-password" required></label><label>New password<input name="newPassword" type="password" minlength="10" autocomplete="new-password" required></label></div><label>Confirm new password<input name="confirmPassword" type="password" minlength="10" autocomplete="new-password" required></label><button class="secondary-btn" type="submit">Update password</button></form><p class="form-note">Changing your password signs out your other persistent sessions.</p></div><button class="secondary-btn" id="logoutButton">Log out</button>`;
+  }
+
+  function bindAccountSecurity(root=document) {
+    const form=$('#accountPasswordForm',root);
+    if (!form) return;
+    form.addEventListener('submit', async e => {
+      e.preventDefault(); const fd=new FormData(form); const currentPassword=String(fd.get('currentPassword')||''); const newPassword=String(fd.get('newPassword')||''); const confirmPassword=String(fd.get('confirmPassword')||'');
+      if (newPassword!==confirmPassword) return toast('New passwords do not match','error');
+      try { const result=await api('/auth/change-password',{method:'POST',body:JSON.stringify({currentPassword,newPassword})}); setToken(result.token,result.user); form.reset(); toast('Password changed'); }
+      catch(err){toast(err.message,'error');}
+    });
   }
 
   async function renderAccount() {
@@ -395,7 +449,7 @@
     try {
       const orders = await api('/orders');
       $('#accountContent').innerHTML = `${accountPanel()}<div style="height:30px"></div><span class="eyebrow">ORDER HISTORY</span>${orders.length ? `<div class="data-list" style="margin-top:14px">${orders.map(o => `<div class="data-row" style="grid-template-columns:1fr 140px 110px auto"><div><strong>${esc(o.orderNumber)}</strong><small>${new Date(o.createdAt).toLocaleDateString()} · ${o.items.length} item(s)</small></div><span>${money(o.totalCents)}</span><span class="status">${titleCase(o.status)}</span><a class="row-action" href="#/order/${encodeURIComponent(o.orderNumber)}">View</a></div>`).join('')}</div>` : emptyProducts('No orders yet.')}`;
-      $('#logoutButton')?.addEventListener('click', logout);
+      $('#logoutButton')?.addEventListener('click', logout); bindAccountSecurity($('#accountContent'));
     } catch(e){$('#accountContent').innerHTML = emptyProducts(e.message);}
   }
 
@@ -408,19 +462,54 @@
     if (!state.token) return renderAccountRequired('Checkout', 'Log in before checking out.');
     await loadCart(false);
     if (!state.cart?.items?.length) { app.innerHTML = `<div class="page-shell"><section class="page-hero"><div class="page-hero-inner"><span class="eyebrow">CHECKOUT</span><h1>Your bag is empty.</h1><a class="primary-btn" href="#/shop">Shop parts</a></div></section></div>`; return; }
-    app.innerHTML = `<div class="checkout-page"><div class="checkout-layout"><form class="checkout-form" id="checkoutForm"><span class="eyebrow">CHECKOUT / DELIVERY</span><h2>Shipping address</h2><div class="field-row"><label>First name<input name="firstName" required value="${esc(state.user?.firstName||'')}"></label><label>Last name<input name="lastName" required value="${esc(state.user?.lastName||'')}"></label></div><label>Address<input name="line1" required></label><label>Address line 2<input name="line2"></label><div class="field-row"><label>City<input name="city" required></label><label>State / province<input name="state"></label></div><div class="field-row"><label>Postal code<input name="postalCode" required></label><label>Country code<select name="country"><option value="ZA">South Africa (ZA)</option><option value="US">United States (US)</option><option value="GB">United Kingdom (GB)</option><option value="DE">Germany (DE)</option><option value="AU">Australia (AU)</option></select></label></div><label>Phone<input name="phone"></label><label>Order note<textarea name="customerNote" rows="3"></textarea></label><button class="primary-btn wide" type="submit">Create order</button><p class="form-note">This V1 storefront uses the existing SANDMAN checkout API. If Stripe keys are not configured, it will create a pending test order without charging a card.</p></form><aside class="order-summary"><span class="eyebrow">ORDER / SUMMARY</span><div style="height:15px"></div>${state.cart.items.map(i => `<div class="summary-item">${imageOf(i.product)?`<img src="${esc(imageOf(i.product))}" alt="">`:'<div class="skeleton" style="width:55px;height:55px"></div>'}<div><strong>${esc(i.product.name)}</strong><span>Qty ${i.quantity}</span></div><strong>${money(i.product.priceCents*i.quantity)}</strong></div>`).join('')}<div class="summary-totals" id="quoteTotals"><div class="summary-line"><span>Subtotal</span><span>${money(state.cart.subtotalCents)}</span></div><div class="summary-line"><span>Shipping</span><span>Calculated next</span></div><div class="summary-line total"><span>Estimated total</span><span>${money(state.cart.subtotalCents)}</span></div></div></aside></div></div>`;
+    state.paymentConfig = state.paymentConfig || await api('/payments/config');
+    const hasMarketplace = state.cart.items.some(i => i.product.sourceType === 'MARKETPLACE');
+    const methods = [];
+    if (state.paymentConfig.stripe.enabled) methods.push(`<label class="payment-choice"><input type="radio" name="paymentProvider" value="stripe" checked><span><strong>Card + digital wallets</strong><small>Stripe dynamically shows eligible cards, Apple Pay, Google Pay, Link, bank methods, BNPL and local methods.</small></span></label>`);
+    if (state.paymentConfig.paypal.enabled && !hasMarketplace) methods.push(`<label class="payment-choice"><input type="radio" name="paymentProvider" value="paypal" ${methods.length?'':'checked'}><span><strong>PayPal</strong><small>Pay securely with your PayPal account or eligible PayPal funding sources.</small></span></label>`);
+    if (state.paymentConfig.bankTransfer.enabled && !hasMarketplace) methods.push(`<label class="payment-choice"><input type="radio" name="paymentProvider" value="bank_transfer" ${methods.length?'':'checked'}><span><strong>Bank transfer / EFT</strong><small>Your order stays pending until SANDMAN verifies the transfer.</small></span></label>`);
+    app.innerHTML = `<div class="checkout-page"><div class="checkout-layout"><form class="checkout-form" id="checkoutForm"><span class="eyebrow">CHECKOUT / DELIVERY</span><h2>Shipping address</h2><div class="field-row"><label>First name<input name="firstName" required value="${esc(state.user?.firstName||'')}"></label><label>Last name<input name="lastName" required value="${esc(state.user?.lastName||'')}"></label></div><label>Address<input name="line1" required></label><label>Address line 2<input name="line2"></label><div class="field-row"><label>City<input name="city" required></label><label>State / province<input name="state"></label></div><div class="field-row"><label>Postal code<input name="postalCode" required></label><label>Country code<select name="country"><option value="ZA">South Africa (ZA)</option><option value="US">United States (US)</option><option value="GB">United Kingdom (GB)</option><option value="DE">Germany (DE)</option><option value="AU">Australia (AU)</option><option value="CA">Canada (CA)</option></select></label></div><label>Phone<input name="phone"></label><label>Order note<textarea name="customerNote" rows="3"></textarea></label><div class="payment-methods"><span class="eyebrow">PAYMENT METHOD</span>${methods.join('') || '<div class="form-note">No live payment provider is configured yet.</div>'}${hasMarketplace ? '<p class="form-note">Marketplace carts use Stripe so seller payouts and the SANDMAN commission can be split securely.</p>' : ''}</div><button class="primary-btn wide" type="submit" ${methods.length?'':'disabled'}>Continue to secure payment</button></form><aside class="order-summary"><span class="eyebrow">ORDER / SUMMARY</span><div style="height:15px"></div>${state.cart.items.map(i => `<div class="summary-item">${imageOf(i.product)?`<img src="${esc(imageOf(i.product))}" alt="">`:'<div class="skeleton" style="width:55px;height:55px"></div>'}<div><strong>${esc(i.product.name)}</strong><span>Qty ${i.quantity}</span></div><strong>${money(i.product.priceCents*i.quantity)}</strong></div>`).join('')}<div class="summary-totals" id="quoteTotals"><div class="summary-line"><span>Subtotal</span><span>${money(state.cart.subtotalCents)}</span></div><div class="summary-line"><span>Shipping</span><span>Calculated next</span></div><div class="summary-line total"><span>Estimated total</span><span>${money(state.cart.subtotalCents)}</span></div></div></aside></div></div>`;
     $('#checkoutForm').addEventListener('submit', async e => {
       e.preventDefault(); const f = new FormData(e.currentTarget); const address = { firstName:f.get('firstName'), lastName:f.get('lastName'), line1:f.get('line1'), line2:f.get('line2')||undefined, city:f.get('city'), state:f.get('state')||undefined, postalCode:f.get('postalCode'), country:f.get('country'), phone:f.get('phone')||undefined };
-      const btn = e.currentTarget.querySelector('button[type=submit]'); btn.disabled=true; btn.textContent='Creating order…';
+      const btn = e.currentTarget.querySelector('button[type=submit]'); btn.disabled=true; btn.textContent='Creating secure payment…';
       try {
-        const quote = await api('/orders/quote',{method:'POST',body:JSON.stringify({shippingAddress:address})});
-        $('#quoteTotals').innerHTML = `<div class="summary-line"><span>Subtotal</span><span>${money(quote.subtotalCents)}</span></div><div class="summary-line"><span>Shipping</span><span>${money(quote.shippingCents)}</span></div><div class="summary-line"><span>Tax</span><span>${money(quote.taxCents)}</span></div><div class="summary-line total"><span>Total</span><span>${money(quote.totalCents)}</span></div>`;
-        const order = await api('/orders/checkout',{method:'POST',body:JSON.stringify({shippingAddress:address,customerNote:f.get('customerNote')||undefined})});
-        await loadCart(false);
-        if (order.payment?.provider === 'not_configured') { toast('Test order created — payment not configured'); location.hash=`#/order/${encodeURIComponent(order.order.orderNumber)}`; }
-        else { toast('Order created — payment intent ready'); location.hash=`#/order/${encodeURIComponent(order.order.orderNumber)}`; }
-      } catch(err){toast(err.message,'error');btn.disabled=false;btn.textContent='Create order';}
+        const result = await api('/orders/checkout',{method:'POST',body:JSON.stringify({shippingAddress:address,customerNote:f.get('customerNote')||undefined,paymentProvider:f.get('paymentProvider')})});
+        if (result.payment.provider === 'stripe') await renderStripePayment(result);
+        else if (result.payment.provider === 'paypal') await renderPayPalPayment(result);
+        else if (result.payment.provider === 'bank_transfer') {
+          e.currentTarget.innerHTML = `<span class="eyebrow">BANK TRANSFER / EFT</span><h2>Order ${esc(result.order.orderNumber)}</h2><div class="bank-instructions">${esc(result.payment.instructions).replaceAll('\n','<br>')}</div><p class="form-note">Use the order number as your payment reference. The order remains pending until payment is verified.</p><a class="primary-btn wide" href="#/order/${encodeURIComponent(result.order.orderNumber)}">View order</a>`;
+        }
+      } catch(err){toast(err.message,'error');btn.disabled=false;btn.textContent='Continue to secure payment';}
     });
+    try { const f=$('#checkoutForm'); const fd=new FormData(f); const a={firstName:state.user?.firstName||'Quote',lastName:state.user?.lastName||'Customer',line1:'Quote only',city:'Quote',postalCode:'0000',country:'ZA'}; const q=await api('/orders/quote',{method:'POST',body:JSON.stringify({shippingAddress:a})}); $('#quoteTotals').innerHTML=`<div class="summary-line"><span>Subtotal</span><span>${money(q.subtotalCents)}</span></div><div class="summary-line"><span>Shipping</span><span>${money(q.shippingCents)}</span></div><div class="summary-line"><span>Tax</span><span>${money(q.taxCents)}</span></div><div class="summary-line total"><span>Total</span><span>${money(q.totalCents)}</span></div>`; } catch {}
+  }
+
+  async function renderStripePayment(result) {
+    await loadExternalScript('https://js.stripe.com/v3/', 'Stripe');
+    const stripe = window.Stripe(result.payment.publishableKey || state.paymentConfig.stripe.publishableKey);
+    const elements = stripe.elements({ clientSecret: result.payment.clientSecret, appearance: { theme:'night', variables:{ colorPrimary:'#dfc78d', colorBackground:'#0b0b0a', colorText:'#eee6da', borderRadius:'0px' } } });
+    const form = $('#checkoutForm');
+    form.innerHTML = `<span class="eyebrow">SECURE PAYMENT / STRIPE</span><h2>Pay ${money(result.order.totalCents)}</h2><p class="form-note">Stripe automatically shows the payment methods eligible for this customer, currency and device.</p><div id="stripePaymentElement" class="provider-element"></div><button class="primary-btn wide" id="stripePayButton" type="button">Pay now</button><p class="form-note" id="paymentMessage"></p>`;
+    elements.create('payment',{layout:'accordion'}).mount('#stripePaymentElement');
+    $('#stripePayButton').addEventListener('click', async () => {
+      const button=$('#stripePayButton'); button.disabled=true; button.textContent='Processing…';
+      const {error} = await stripe.confirmPayment({ elements, confirmParams:{ return_url:`${location.origin}/#/order/${encodeURIComponent(result.order.orderNumber)}` }, redirect:'if_required' });
+      if (error) { $('#paymentMessage').textContent=error.message||'Payment failed'; button.disabled=false; button.textContent='Pay now'; return; }
+      toast('Payment submitted'); location.hash=`#/order/${encodeURIComponent(result.order.orderNumber)}`;
+    });
+  }
+
+  async function renderPayPalPayment(result) {
+    const config=state.paymentConfig.paypal;
+    const src=`https://www.paypal.com/sdk/js?client-id=${encodeURIComponent(config.clientId)}&currency=${encodeURIComponent(result.order.currency)}&intent=capture`;
+    await loadExternalScript(src, 'paypal');
+    const form=$('#checkoutForm');
+    form.innerHTML=`<span class="eyebrow">SECURE PAYMENT / PAYPAL</span><h2>Pay ${money(result.order.totalCents)}</h2><div id="paypalButtons" class="provider-element"></div><p class="form-note" id="paymentMessage"></p>`;
+    await window.paypal.Buttons({
+      createOrder: () => result.payment.paypalOrderId,
+      onApprove: async () => { const captured=await api(`/orders/${encodeURIComponent(result.order.orderNumber)}/paypal/capture`,{method:'POST'}); toast('PayPal payment complete'); location.hash=`#/order/${encodeURIComponent(captured.order.orderNumber)}`; },
+      onError: err => { $('#paymentMessage').textContent=err?.message||'PayPal payment failed'; }
+    }).render('#paypalButtons');
   }
 
   async function renderOrder(orderNumber) {
@@ -437,7 +526,8 @@
   }
 
   async function logout() {
-    setToken('', null); state.cart=null; updateCartCount(); toast('Logged out'); location.hash='#/';
+    try { await fetch('/api/auth/logout', { method:'POST', credentials:'same-origin', headers: state.token ? { Authorization:`Bearer ${state.token}` } : {} }); } catch {}
+    setToken('', null); state.cart=null; updateCartCount(); location.hash='#/'; toast('Signed out');
   }
 
   async function route() {

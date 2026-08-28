@@ -6,6 +6,10 @@ import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
+import { env } from '../../config/env';
+import { getStripe } from '../../services/stripe.service';
+import { markMarketplacePayoutReady, processReadyStripeMarketplacePayouts } from '../../services/marketplace-payout.service';
+import { recomputeOrderFulfillmentStatus } from '../../services/order-lifecycle.service';
 
 export const marketplaceRouter = Router();
 
@@ -76,6 +80,80 @@ marketplaceRouter.get('/', asyncHandler(async (req, res) => {
   res.json({ items, total, page: query.page, pages: Math.max(1, Math.ceil(total / query.limit)) });
 }));
 
+marketplaceRouter.get('/seller-config', requireAuth, asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
+  if (!user) throw new HttpError(404, 'User not found');
+  res.json({
+    commissionPercent: env.MARKETPLACE_COMMISSION_PERCENT,
+    commissionAcceptedAt: user.sellerCommissionAcceptedAt,
+    stripeConnectConfigured: Boolean(env.STRIPE_SECRET_KEY),
+    payoutAccountId: user.stripeConnectAccountId,
+    payoutsEnabled: user.stripeConnectPayoutsEnabled,
+    chargesEnabled: user.stripeConnectChargesEnabled,
+    sellerCountry: user.sellerCountry,
+  });
+}));
+
+marketplaceRouter.get('/payout/status', requireAuth, asyncHandler(async (req, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
+  if (!user) throw new HttpError(404, 'User not found');
+  const stripe = getStripe();
+  if (!stripe || !user.stripeConnectAccountId) {
+    return res.json({ connected: false, payoutsEnabled: false, chargesEnabled: false, accountId: user.stripeConnectAccountId });
+  }
+  const account = await stripe.accounts.retrieve(user.stripeConnectAccountId);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { stripeConnectPayoutsEnabled: account.payouts_enabled, stripeConnectChargesEnabled: account.charges_enabled },
+  });
+  res.json({
+    connected: true,
+    accountId: account.id,
+    payoutsEnabled: account.payouts_enabled,
+    chargesEnabled: account.charges_enabled,
+    detailsSubmitted: account.details_submitted,
+    requirementsDue: account.requirements?.currently_due ?? [],
+  });
+}));
+
+marketplaceRouter.post('/payout/onboard', requireAuth, asyncHandler(async (req, res) => {
+  const stripe = getStripe();
+  if (!stripe) throw new HttpError(503, 'Stripe Connect is not configured');
+  const body = z.object({ country: z.string().length(2).transform(v => v.toUpperCase()) }).parse(req.body);
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
+  if (!user) throw new HttpError(404, 'User not found');
+
+  let accountId = user.stripeConnectAccountId;
+  if (!accountId) {
+    const account = await stripe.accounts.create({
+      type: 'express',
+      country: body.country,
+      email: user.email,
+      capabilities: { transfers: { requested: true } },
+      metadata: { sandmanUserId: user.id },
+    });
+    accountId = account.id;
+    await prisma.user.update({ where: { id: user.id }, data: { stripeConnectAccountId: accountId, sellerCountry: body.country } });
+  }
+
+  const accountLink = await stripe.accountLinks.create({
+    account: accountId,
+    refresh_url: `${env.APP_URL}/#/seller?stripe=refresh`,
+    return_url: `${env.APP_URL}/#/seller?stripe=return`,
+    type: 'account_onboarding',
+  });
+  res.json({ url: accountLink.url });
+}));
+
+marketplaceRouter.post('/payout/dashboard', requireAuth, asyncHandler(async (req, res) => {
+  const stripe = getStripe();
+  if (!stripe) throw new HttpError(503, 'Stripe Connect is not configured');
+  const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
+  if (!user?.stripeConnectAccountId) throw new HttpError(409, 'Connect a payout account first');
+  const link = await stripe.accounts.createLoginLink(user.stripeConnectAccountId);
+  res.json({ url: link.url });
+}));
+
 marketplaceRouter.get('/mine', requireAuth, asyncHandler(async (req, res) => {
   const items = await prisma.product.findMany({
     where: { sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
@@ -102,7 +180,15 @@ marketplaceRouter.get('/sales', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
-  const data = listingSchema.parse(req.body);
+  const data = listingSchema.extend({ commissionAccepted: z.literal(true) }).parse(req.body);
+  const seller = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
+  if (!seller) throw new HttpError(404, 'Seller account not found');
+  if (!seller.stripeConnectAccountId || !seller.stripeConnectPayoutsEnabled) {
+    throw new HttpError(409, 'Connect and verify a Stripe payout account before publishing a marketplace listing');
+  }
+  if (!seller.sellerCommissionAcceptedAt) {
+    await prisma.user.update({ where: { id: seller.id }, data: { sellerCommissionAcceptedAt: new Date() } });
+  }
   const baseSlug = cleanSlug(data.name) || 'part';
   const slug = `${baseSlug}-${nanoid(7).toLowerCase()}`;
   const sku = `SM-MKT-${nanoid(10).toUpperCase()}`;
@@ -110,7 +196,7 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
   const category = await prisma.category.findUnique({ where: { id: data.categoryId } });
   if (!category) throw new HttpError(400, 'Invalid category');
 
-  const { images, ...listing } = data;
+  const { images, commissionAccepted: _commissionAccepted, ...listing } = data;
   const product = await prisma.product.create({
     data: {
       ...listing,
@@ -162,7 +248,12 @@ marketplaceRouter.post('/sales/:orderItemId/ship', requireAuth, asyncHandler(asy
   }).parse(req.body);
 
   const item = await prisma.orderItem.findFirst({
-    where: { id: routeParam(req.params.orderItemId, 'orderItemId'), sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
+    where: {
+      id: routeParam(req.params.orderItemId, 'orderItemId'),
+      sellerId: req.auth!.userId,
+      sourceType: 'MARKETPLACE',
+      order: { paymentStatus: 'PAID' },
+    },
   });
   if (!item) throw new HttpError(404, 'Sale item not found');
 
@@ -177,5 +268,22 @@ marketplaceRouter.post('/sales/:orderItemId/ship', requireAuth, asyncHandler(asy
   await prisma.orderEvent.create({
     data: { orderId: item.orderId, type: 'MARKETPLACE_SELLER_SHIPPED', message: `${item.name} marked shipped by marketplace seller` },
   });
+
+  // A seller payout covers all of that seller's items in this order, so do not
+  // release it until every marketplace line for the seller has shipment evidence.
+  const unshippedSellerItems = await prisma.orderItem.count({
+    where: {
+      orderId: item.orderId,
+      sellerId: req.auth!.userId,
+      sourceType: 'MARKETPLACE',
+      sellerShippedAt: null,
+    },
+  });
+  if (unshippedSellerItems === 0) {
+    await markMarketplacePayoutReady(item.orderId, req.auth!.userId);
+    await processReadyStripeMarketplacePayouts(item.orderId, req.auth!.userId);
+  }
+  await recomputeOrderFulfillmentStatus(item.orderId);
+
   res.json(updated);
 }));

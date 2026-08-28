@@ -5,7 +5,10 @@ import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth, requireRole } from '../../middleware/auth';
-import { submitPaidOrderToSuppliers } from '../../services/fulfillment.service';
+import { finalizePaidOrder } from '../../services/payment-finalization.service';
+import { releaseMarketplaceStock, recomputeOrderFulfillmentStatus } from '../../services/order-lifecycle.service';
+import { processReadyStripeMarketplacePayouts } from '../../services/marketplace-payout.service';
+import { env } from '../../config/env';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole('ADMIN', 'STAFF'));
@@ -13,6 +16,37 @@ adminRouter.use(requireAuth, requireRole('ADMIN', 'STAFF'));
 function dayKey(date: Date) {
   return date.toISOString().slice(0, 10);
 }
+
+adminRouter.get('/settings', asyncHandler(async (_req, res) => {
+  const [sessions, payouts] = await Promise.all([
+    prisma.authSession.count({ where: { revokedAt: null, expiresAt: { gt: new Date() } } }),
+    prisma.sellerPayout.aggregate({ _sum: { amountCents: true, platformFeeCents: true }, _count: true }),
+  ]);
+  res.json({
+    environment: env.NODE_ENV,
+    appUrl: env.APP_URL,
+    apiUrl: env.API_URL,
+    sessionDays: env.SESSION_DAYS,
+    activePersistentSessions: sessions,
+    payments: {
+      stripe: Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
+      paypal: Boolean(env.PAYPAL_CLIENT_ID && env.PAYPAL_CLIENT_SECRET),
+      bankTransfer: Boolean(env.BANK_TRANSFER_INSTRUCTIONS),
+    },
+    marketplace: {
+      commissionPercent: env.MARKETPLACE_COMMISSION_PERCENT,
+      payoutProvider: 'Stripe Connect',
+      payoutCount: payouts._count,
+      sellerPayoutCents: payouts._sum.amountCents ?? 0,
+      platformFeeCents: payouts._sum.platformFeeCents ?? 0,
+    },
+    syncee: {
+      mode: env.SYNCEE_MODE,
+      ordersUrl: env.SYNCEE_ORDERS_URL,
+      customRetailerApiAvailable: false,
+    },
+  });
+}));
 
 adminRouter.get('/dashboard', asyncHandler(async (_req, res) => {
   const sevenDaysAgo = new Date();
@@ -263,17 +297,38 @@ adminRouter.get('/orders/:id', asyncHandler(async (req, res) => {
 adminRouter.post('/orders/:id/mark-paid', asyncHandler(async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: routeParam(req.params.id, 'id') } });
   if (!order) throw new HttpError(404, 'Order not found');
-  await prisma.order.update({ where: { id: order.id }, data: { paymentStatus: 'PAID', status: 'PAID' } });
-  await prisma.orderEvent.create({ data: { orderId: order.id, type: 'ADMIN_MARKED_PAID', message: 'Order manually marked paid by staff' } });
-  const fulfillments = await submitPaidOrderToSuppliers(order.id);
-  res.json({ success: true, fulfillments });
+  if (order.paymentStatus !== 'PAID') {
+    await prisma.orderEvent.create({ data: { orderId: order.id, type: 'ADMIN_MARKED_PAID', message: 'Order manually marked paid by staff' } });
+  }
+  await finalizePaidOrder({ orderId: order.id, provider: 'manual', message: 'Order manually marked paid by staff' });
+  const updated = await prisma.order.findUnique({ where: { id: order.id }, include: { fulfillments: true, sellerPayouts: true } });
+  res.json({ success: true, order: updated });
 }));
 
 adminRouter.patch('/orders/:id/status', asyncHandler(async (req, res) => {
-  const data = z.object({ status: z.enum(['PENDING_PAYMENT', 'PAID', 'PROCESSING', 'SUBMITTED_TO_SUPPLIER', 'PARTIALLY_FULFILLED', 'FULFILLED', 'CANCELLED', 'REFUNDED', 'FAILED']) }).parse(req.body);
-  const order = await prisma.order.update({ where: { id: routeParam(req.params.id, 'id') }, data: { status: data.status } });
+  const data = z.object({
+    status: z.enum(['PROCESSING', 'SUBMITTED_TO_SUPPLIER', 'PARTIALLY_FULFILLED', 'FULFILLED', 'CANCELLED', 'FAILED']),
+  }).parse(req.body);
+  const id = routeParam(req.params.id, 'id');
+  const current = await prisma.order.findUnique({ where: { id } });
+  if (!current) throw new HttpError(404, 'Order not found');
+
+  if (data.status === 'CANCELLED') {
+    if (current.paymentStatus === 'PAID') {
+      throw new HttpError(409, 'Paid orders cannot be cancelled with a status edit. Refund the payment first.');
+    }
+    await releaseMarketplaceStock(id);
+  }
+  if (data.status === 'FULFILLED' && current.paymentStatus !== 'PAID') {
+    throw new HttpError(409, 'An unpaid order cannot be fulfilled');
+  }
+
+  const order = await prisma.order.update({ where: { id }, data: { status: data.status } });
   await prisma.orderEvent.create({ data: { orderId: order.id, type: 'ADMIN_STATUS_CHANGED', message: `Order status changed to ${data.status}` } });
-  res.json(order);
+  if (['PROCESSING', 'SUBMITTED_TO_SUPPLIER', 'PARTIALLY_FULFILLED', 'FULFILLED'].includes(data.status)) {
+    await recomputeOrderFulfillmentStatus(id);
+  }
+  res.json(await prisma.order.findUnique({ where: { id } }));
 }));
 
 adminRouter.get('/customers', asyncHandler(async (req, res) => {
@@ -363,7 +418,7 @@ adminRouter.post('/suppliers', asyncHandler(async (req, res) => {
   const data = z.object({
     name: z.string().min(2),
     code: z.string().min(2).max(50),
-    type: z.enum(['MOCK', 'CJ', 'CUSTOM']).default('CUSTOM'),
+    type: z.enum(['MOCK', 'CJ', 'SYNCEE', 'CUSTOM']).default('CUSTOM'),
     priority: z.number().int().min(1).default(100),
     baseUrl: z.string().url().optional(),
   }).parse(req.body);
@@ -442,4 +497,13 @@ adminRouter.post('/vehicles/variants', asyncHandler(async (req, res) => {
     drivetrain: z.string().optional(),
   }).refine(v => v.yearEnd >= v.yearStart, { message: 'yearEnd must be >= yearStart' }).parse(req.body);
   res.status(201).json(await prisma.vehicleVariant.create({ data }));
+}));
+
+adminRouter.post('/payouts/:orderId/retry', asyncHandler(async (req, res) => {
+  const orderId = routeParam(req.params.orderId, 'orderId');
+  const order = await prisma.order.findUnique({ where: { id: orderId } });
+  if (!order) throw new HttpError(404, 'Order not found');
+  if (order.paymentStatus !== 'PAID') throw new HttpError(409, 'Only paid orders can have marketplace payouts');
+  const payouts = await processReadyStripeMarketplacePayouts(orderId);
+  res.json(payouts);
 }));

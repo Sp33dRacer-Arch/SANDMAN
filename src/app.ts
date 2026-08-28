@@ -16,6 +16,7 @@ import { adminRouter } from './modules/admin/admin.routes';
 import { suppliersRouter } from './modules/suppliers/suppliers.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { marketplaceRouter } from './modules/marketplace/marketplace.routes';
+import { paymentsRouter } from './modules/payments/payments.routes';
 import { errorHandler, notFound } from './middleware/error-handler';
 
 export const app = express();
@@ -25,10 +26,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
+      scriptSrc: ["'self'", 'https://js.stripe.com', 'https://www.paypal.com'],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", 'https://api.stripe.com', 'https://*.stripe.com', 'https://www.paypal.com', 'https://*.paypal.com'],
+      frameSrc: ["'self'", 'https://js.stripe.com', 'https://hooks.stripe.com', 'https://www.paypal.com', 'https://*.paypal.com'],
       fontSrc: ["'self'", 'data:'],
     },
   },
@@ -53,7 +55,7 @@ app.use('/assets', express.static(path.join(storeUiDir, 'assets')));
 app.get('/api', (_req, res) => res.json({
   name: 'SANDMAN',
   description: 'Engine-parts marketplace and dropshipping API',
-  version: '1.2.0',
+  version: '1.3.1',
   health: '/api/health',
   admin: '/admin',
   storefront: '/',
@@ -66,6 +68,7 @@ app.use('/api/auth', authRouter);
 app.use('/api/vehicles', vehiclesRouter);
 app.use('/api/products', productsRouter);
 app.use('/api/marketplace', marketplaceRouter);
+app.use('/api/payments', paymentsRouter);
 app.use('/api/garage', garageRouter);
 app.use('/api/cart', cartRouter);
 app.use('/api/orders', ordersRouter);

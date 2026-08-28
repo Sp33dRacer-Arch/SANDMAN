@@ -1,11 +1,9 @@
 (() => {
   'use strict';
 
-  const TOKEN_KEY = 'sandman_admin_token';
-  const USER_KEY = 'sandman_admin_user';
   const state = {
-    token: localStorage.getItem(TOKEN_KEY),
-    user: safeJson(localStorage.getItem(USER_KEY)),
+    token: null,
+    user: null,
     view: 'overview',
     cache: {},
     searchTimer: null,
@@ -69,21 +67,33 @@
     setTimeout(() => node.remove(), 3600);
   }
 
-  async function api(path, options = {}) {
+  async function refreshSession() {
+    try {
+      const response = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin' });
+      if (!response.ok) return false;
+      const data = await response.json();
+      if (!['ADMIN', 'STAFF'].includes(data.user?.role)) return false;
+      setSession(data.token, data.user);
+      return true;
+    } catch { return false; }
+  }
+
+  async function api(path, options = {}, retry = true) {
     const headers = { ...(options.headers || {}) };
     if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
     if (state.token) headers.Authorization = `Bearer ${state.token}`;
 
-    const response = await fetch(path, { ...options, headers });
+    const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
     const contentType = response.headers.get('content-type') || '';
     const data = contentType.includes('application/json') ? await response.json() : await response.text();
 
-    if (response.status === 401 && !path.includes('/auth/login')) {
+    if (response.status === 401 && retry && !path.includes('/auth/login') && !path.includes('/auth/refresh')) {
+      if (await refreshSession()) return api(path, options, false);
       logout(false);
       throw new Error('Your admin session expired. Please sign in again.');
     }
     if (!response.ok) {
-      const message = data?.error?.message || data?.message || (typeof data === 'string' && data) || `Request failed (${response.status})`;
+      const message = data?.error?.message || data?.error || data?.message || (typeof data === 'string' && data) || `Request failed (${response.status})`;
       throw new Error(message);
     }
     return data;
@@ -107,15 +117,15 @@
   function setSession(token, user) {
     state.token = token;
     state.user = user;
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    // Access tokens are intentionally memory-only. The HttpOnly refresh
+    // cookie is what remembers this browser securely.
   }
 
   function logout(showMessage = true) {
+    fetch('/api/auth/logout', { method:'POST', credentials:'same-origin', headers: state.token ? { Authorization:`Bearer ${state.token}` } : {} }).catch(() => {});
     state.token = null;
     state.user = null;
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+
     appShell.hidden = true;
     loginView.hidden = false;
     closeModal();
@@ -123,12 +133,11 @@
   }
 
   async function validateSession() {
-    if (!state.token) return false;
+    if (!state.token && !(await refreshSession())) return false;
     try {
       const user = await api('/api/auth/me');
       if (!['ADMIN', 'STAFF'].includes(user.role)) throw new Error('This account does not have admin access.');
       state.user = user;
-      localStorage.setItem(USER_KEY, JSON.stringify(user));
       return true;
     } catch {
       logout(false);
@@ -366,7 +375,7 @@
     const items = await api('/api/admin/fulfillments');
     state.cache.fulfillments = items;
     const rows = items.length ? items.map(item => `
-      <tr><td><strong>${esc(item.order.orderNumber)}</strong><br><span class="subtle">${esc(item.order.email)}</span></td><td>${esc(item.supplier.name)}</td><td>${badge(item.status)}</td><td>${esc(item.supplierOrderId || '—')}</td><td>${esc(item.carrier || '—')}</td><td>${esc(item.trackingNumber || '—')}</td><td>${esc(dateTime(item.updatedAt))}</td>${item.supplierOrderId ? `<td class="text-right"><button class="table-action" data-action="refresh-fulfillment" data-id="${esc(item.id)}">REFRESH ↻</button></td>` : '<td></td>'}</tr>`).join('') : `<tr><td colspan="8"><div class="empty-state"><div><b>No fulfillments yet</b><span>Paid orders submitted to suppliers appear here.</span></div></div></td></tr>`;
+      <tr><td><strong>${esc(item.order.orderNumber)}</strong><br><span class="subtle">${esc(item.order.email)}</span></td><td>${esc(item.supplier.name)}</td><td>${badge(item.status)}</td><td>${esc(item.supplierOrderId || '—')}</td><td>${esc(item.carrier || '—')}</td><td>${esc(item.trackingNumber || '—')}</td><td>${esc(dateTime(item.updatedAt))}</td>${item.supplier.type === 'SYNCEE' ? `<td class="text-right"><button class="table-action" data-action="syncee-fulfillment" data-id="${esc(item.id)}">SYNCEE ↗</button></td>` : item.supplierOrderId ? `<td class="text-right"><button class="table-action" data-action="refresh-fulfillment" data-id="${esc(item.id)}">REFRESH ↻</button></td>` : '<td></td>'}</tr>`).join('') : `<tr><td colspan="8"><div class="empty-state"><div><b>No fulfillments yet</b><span>Paid orders submitted to suppliers appear here.</span></div></div></td></tr>`;
     viewRoot.innerHTML = `<section class="data-panel"><div class="table-wrap"><table><thead><tr><th>Order</th><th>Supplier</th><th>Status</th><th>Supplier order</th><th>Carrier</th><th>Tracking</th><th>Updated</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
   }
 
@@ -382,14 +391,18 @@
   }
 
   async function renderSettings() {
-    heading('Settings', 'Local development configuration and SANDMAN system status.');
-    const health = await api('/api/health');
+    heading('Settings', 'Production security, payments, marketplace payouts and supplier integrations.');
+    const [health, config] = await Promise.all([api('/api/health'), api('/api/admin/settings')]);
     viewRoot.innerHTML = `
       <section class="settings-grid">
-        <article class="setting-card"><div class="eyebrow">API</div><h3>SANDMAN backend</h3><p>The admin console is served by the same Express application as your ecommerce API.</p><div class="code-block">${esc(JSON.stringify(health, null, 2))}</div></article>
-        <article class="setting-card"><div class="eyebrow">DATABASE</div><h3>PostgreSQL + Prisma</h3><p>Products, fitments, suppliers, customers and orders are stored in PostgreSQL through Prisma.</p><button class="btn" data-action="copy-command" data-copy="npx prisma studio">Copy Prisma Studio command</button></article>
-        <article class="setting-card"><div class="eyebrow">SECURITY</div><h3>Admin session</h3><p>You are signed in as ${esc(state.user?.email || '')}. JWT authorization protects all admin API routes.</p><button class="btn btn-danger" data-action="logout">Sign out</button></article>
-        <article class="setting-card"><div class="eyebrow">ENVIRONMENT</div><h3>Development mode</h3><p>Before production, replace demo credentials, configure a production database, HTTPS, payment secrets and real supplier API keys.</p><div class="code-block">SANDMAN Admin V1.1\nhttp://localhost:4000/admin</div></article>
+        <article class="setting-card"><div class="eyebrow">API</div><h3>SANDMAN backend</h3><p>Live API served from the same Express application as the storefront and admin console.</p><div class="code-block">${esc(JSON.stringify(health, null, 2))}</div></article>
+        <article class="setting-card"><div class="eyebrow">ENVIRONMENT</div><h3>${esc(config.environment.toUpperCase())}</h3><p>Public application URL and server environment currently in use.</p><div class="code-block">${esc(config.appUrl)}\n${esc(config.apiUrl)}</div></article>
+        <article class="setting-card"><div class="eyebrow">SECURITY</div><h3>Persistent admin login</h3><p>You are signed in as ${esc(state.user?.email || '')}. A secure HttpOnly refresh session remembers the login for up to ${esc(config.sessionDays)} days while short-lived JWT access tokens are rotated.</p><form id="admin-password-form" class="form-grid"><label class="field span-2"><span>Current password</span><input name="currentPassword" type="password" autocomplete="current-password" required></label><label class="field"><span>New password</span><input name="newPassword" type="password" minlength="10" autocomplete="new-password" required></label><label class="field"><span>Confirm password</span><input name="confirmPassword" type="password" minlength="10" autocomplete="new-password" required></label><button class="btn btn-primary span-2" type="submit">Change password + sign out other sessions</button></form><div style="height:12px"></div><button class="btn btn-danger" data-action="logout">Sign out</button></article>
+        <article class="setting-card"><div class="eyebrow">PAYMENTS</div><h3>Checkout providers</h3><p>Stripe Payment Element can surface eligible cards, Apple Pay, Google Pay, Link, bank methods, BNPL and regional methods. PayPal and manual EFT are separate options.</p><div class="status-stack"><span>Stripe <b>${config.payments.stripe?'READY':'NOT CONFIGURED'}</b></span><span>PayPal <b>${config.payments.paypal?'READY':'NOT CONFIGURED'}</b></span><span>Bank / EFT <b>${config.payments.bankTransfer?'READY':'NOT CONFIGURED'}</b></span></div></article>
+        <article class="setting-card"><div class="eyebrow">OWNER PAYOUTS</div><h3>Money to your business</h3><p>SANDMAN never stores raw payout card or bank numbers. Add your business bank account or supported debit card securely in your payment processor so settled customer funds pay out to you.</p><div class="button-stack"><a class="btn" href="https://dashboard.stripe.com/settings/payouts" target="_blank" rel="noreferrer">Stripe payout settings ↗</a><a class="btn" href="https://www.paypal.com/businessmanage/money" target="_blank" rel="noreferrer">PayPal business money ↗</a></div></article>
+        <article class="setting-card"><div class="eyebrow">MARKETPLACE</div><h3>${esc(config.marketplace.commissionPercent)}% SANDMAN commission</h3><p>Marketplace sellers connect a Stripe Connect payout account. On successful Stripe marketplace sales, SANDMAN keeps the configured fee. The seller's net proceeds become transferable after that seller has supplied shipment tracking for every item in the order.</p><div class="code-block">Seller payouts: ${esc(money(config.marketplace.sellerPayoutCents))}\nSANDMAN fees: ${esc(money(config.marketplace.platformFeeCents))}\nPayout records: ${esc(config.marketplace.payoutCount)}</div></article>
+        <article class="setting-card"><div class="eyebrow">SYNCEE</div><h3>Manual fulfillment bridge</h3><p>Syncee's public documentation does not expose a retailer-side custom-platform order API. SANDMAN therefore creates a tracked Syncee handoff: open Syncee, pay/forward the supplier order there, then record tracking in SANDMAN.</p><a class="btn" href="${esc(config.syncee.ordersUrl)}" target="_blank" rel="noreferrer">Open Syncee ↗</a></article>
+        <article class="setting-card"><div class="eyebrow">DATABASE</div><h3>PostgreSQL + Prisma</h3><p>Products, sessions, orders, marketplace commissions, seller payouts and fulfillment records are stored in PostgreSQL.</p><button class="btn" data-action="copy-command" data-copy="npx prisma studio">Copy Prisma Studio command</button></article>
       </section>`;
   }
 
@@ -478,7 +491,7 @@
   }
 
   async function openSupplierModal() {
-    openModal(`<form id="supplier-form"><div class="modal-header"><div><h2>Add supplier</h2><p>Connect a dropship or wholesale source</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="form-grid"><label class="field"><span>Name</span><input name="name" required placeholder="CJ Dropshipping" /></label><label class="field"><span>Code</span><input name="code" required placeholder="cj" /></label><label class="field"><span>Type</span><select name="type"><option>CJ</option><option>CUSTOM</option><option>MOCK</option></select></label><label class="field"><span>Priority</span><input name="priority" type="number" min="1" value="100" /></label><label class="field span-2"><span>Base API URL (optional)</span><input name="baseUrl" type="url" placeholder="https://supplier-api.example.com" /></label></div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Add supplier</button></div></form>`);
+    openModal(`<form id="supplier-form"><div class="modal-header"><div><h2>Add supplier</h2><p>Connect a dropship or wholesale source</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="form-grid"><label class="field"><span>Name</span><input name="name" required placeholder="CJ Dropshipping" /></label><label class="field"><span>Code</span><input name="code" required placeholder="cj" /></label><label class="field"><span>Type</span><select name="type"><option>CJ</option><option>SYNCEE</option><option>CUSTOM</option><option>MOCK</option></select></label><label class="field"><span>Priority</span><input name="priority" type="number" min="1" value="100" /></label><label class="field span-2"><span>Base API URL (optional)</span><input name="baseUrl" type="url" placeholder="https://supplier-api.example.com" /></label></div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Add supplier</button></div></form>`);
   }
 
   async function openSupplierProductModal() {
@@ -632,6 +645,12 @@
         actionEl.disabled = true;
         await api(`/api/admin/suppliers/fulfillments/${actionEl.dataset.id}/refresh`, { method: 'POST' });
         toast('Tracking refreshed'); await renderFulfillment();
+      } else if (action === 'syncee-fulfillment') {
+        const trackingNumber = prompt('Syncee tracking number (leave blank if not shipped yet)') || undefined;
+        const carrier = trackingNumber ? (prompt('Carrier', 'DHL') || 'Courier') : undefined;
+        if (trackingNumber) await api(`/api/admin/suppliers/fulfillments/${actionEl.dataset.id}/manual`, { method:'PATCH', body:JSON.stringify({ status:'SHIPPED', trackingNumber, carrier }) });
+        window.open('https://syncee.com', '_blank', 'noopener');
+        if (trackingNumber) { toast('Syncee tracking saved'); await renderFulfillment(); }
       } else if (action === 'copy-command') {
         await navigator.clipboard.writeText(actionEl.dataset.copy || ''); toast('Copied', actionEl.dataset.copy || '');
       } else if (action === 'logout') logout();
@@ -655,6 +674,14 @@
         } finally {
           button.disabled = false; button.firstElementChild.textContent = 'Enter dashboard';
         }
+      } else if (form.id === 'admin-password-form') {
+        const fd = new FormData(form);
+        const currentPassword = String(fd.get('currentPassword') || '');
+        const newPassword = String(fd.get('newPassword') || '');
+        const confirmPassword = String(fd.get('confirmPassword') || '');
+        if (newPassword !== confirmPassword) throw new Error('New passwords do not match.');
+        const result = await api('/api/auth/change-password', { method:'POST', body:JSON.stringify({ currentPassword, newPassword }) });
+        setSession(result.token, result.user); form.reset(); toast('Password changed', 'Other persistent sessions were signed out.');
       } else if (form.id === 'product-form') await submitProductForm(form);
       else if (form.id === 'supplier-form') await submitSupplierForm(form);
       else if (form.id === 'supplier-product-form') await submitSupplierProductForm(form);

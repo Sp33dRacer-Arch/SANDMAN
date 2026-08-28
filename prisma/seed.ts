@@ -85,6 +85,12 @@ async function main() {
     create: { name: 'SANDMAN Sandbox Supplier', code: 'mock', type: 'MOCK', priority: 1 },
   });
 
+  await prisma.supplier.upsert({
+    where: { code: 'syncee' },
+    update: { type: 'SYNCEE', active: true },
+    create: { name: 'Syncee', code: 'syncee', type: 'SYNCEE', priority: 25, baseUrl: 'https://syncee.com' },
+  });
+
   const dropshipDefs = [
     { sku: 'SM-B58-INT-001', slug: 'b58-performance-cold-air-intake', name: 'B58 Performance Cold Air Intake', brand: 'SANDMAN Performance', category: 'air-intake', price: 29999, compare: 34999, cost: 14500, ship: 2500, supplierId: 'MOCK-B58-INTAKE', desc: 'High-flow intake system for selected B58-powered vehicles. Supplier-stocked and routed through SANDMAN fulfillment.', fitments: [b58Bmw.id, b58Supra.id] },
     { sku: 'SM-B58-IC-001', slug: 'b58-upgraded-intercooler', name: 'B58 Upgraded Intercooler', brand: 'SANDMAN Performance', category: 'cooling', price: 44999, cost: 22500, ship: 3500, supplierId: 'MOCK-B58-INTERCOOLER', desc: 'High-capacity intercooler core for B58 performance builds, fulfilled directly by a connected supplier.', fitments: [b58Bmw.id, b58Supra.id] },

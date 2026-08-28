@@ -195,7 +195,6 @@ Without Stripe credentials, checkout still creates a `PENDING_PAYMENT` order so 
 - Supplier stock/price scheduled syncing
 - Shipping-rate provider integration
 - Sales tax engine
-- PayPal gateway
 - Refund/return/RMA workflow
 - Coupons and promotions
 - Product reviews
@@ -203,7 +202,6 @@ Without Stripe credentials, checkout still creates a `PENDING_PAYMENT` order so 
 - Background job queue (BullMQ/Redis) for supplier submission and tracking
 - Object storage for product media
 - Observability and audit logs
-- Admin web dashboard
 
 ## Production notes
 
@@ -257,3 +255,101 @@ SANDMAN now serves a customer-facing marketplace at `http://localhost:4000/`.
 ### Upgrading an existing v1.1 install
 
 Apply the `20260828120500_marketplace_storefront` migration, regenerate Prisma Client, rerun the seed, then restart the server.
+
+---
+
+# SANDMAN V1.3.1 — Payments, Payouts, Syncee & Production Hardening
+
+V1.3 adds production-oriented commerce features on top of the V1.2 marketplace.
+
+## New in V1.3
+
+- **Persistent login sessions**: short-lived JWT access tokens can be refreshed from a secure HttpOnly cookie for up to `SESSION_DAYS` (default 90 days). Browser restarts no longer force a fresh login while the persistent session is valid.
+- **Change password in the website**: Admin Settings and customer Account pages can change passwords. Other persistent sessions are revoked after a password change.
+- **Stripe Payment Element**: uses automatic payment methods so Stripe can show eligible cards, wallets, bank methods, BNPL and local payment methods based on merchant/customer/currency eligibility.
+- **PayPal checkout**: optional PayPal Orders v2 create/capture flow for dropship-only carts.
+- **Bank transfer / EFT**: optional manual payment method. Orders remain pending until an admin verifies the transfer and marks the order paid.
+- **Marketplace commission**: `MARKETPLACE_COMMISSION_PERCENT` (default 10%) is calculated on marketplace merchandise sales.
+- **Stripe Connect seller onboarding + payouts**: marketplace sellers connect a verified Express payout account. Stripe marketplace payments can be split from the platform to multiple sellers after payment succeeds.
+- **Owner payout guidance**: Admin Settings links to Stripe/PayPal payout settings. Raw bank/card numbers are intentionally never stored by SANDMAN.
+- **Syncee supplier mode**: a truthful manual fulfillment bridge for a custom SANDMAN retailer. The admin can add `SYNCEE` suppliers, open Syncee for supplier payment/forwarding, and save tracking back in SANDMAN.
+- **Favicon**: simple SANDMAN eye/star favicon based on the brand mark.
+
+## Required Railway variables
+
+Keep the existing variables and add whichever integrations you use:
+
+```env
+JWT_EXPIRES_IN=2h
+SESSION_DAYS=90
+
+STRIPE_SECRET_KEY=
+STRIPE_PUBLISHABLE_KEY=
+STRIPE_WEBHOOK_SECRET=
+
+PAYPAL_CLIENT_ID=
+PAYPAL_CLIENT_SECRET=
+PAYPAL_MODE=sandbox
+
+BANK_TRANSFER_INSTRUCTIONS=
+MARKETPLACE_COMMISSION_PERCENT=10
+MARKETPLACE_PAYOUT_DELAY_DAYS=0
+
+SYNCEE_ORDERS_URL=https://syncee.com
+SYNCEE_MODE=manual
+```
+
+## Stripe webhook
+
+Create a Stripe webhook endpoint pointing to:
+
+```text
+https://YOUR-SANDMAN-DOMAIN/api/webhooks/stripe
+```
+
+At minimum subscribe to:
+
+- `payment_intent.succeeded`
+- `payment_intent.payment_failed`
+
+Then put the signing secret in `STRIPE_WEBHOOK_SECRET`.
+
+## Marketplace payouts
+
+Seller flow:
+
+1. Seller logs in.
+2. Seller opens **Seller dashboard → Payouts**.
+3. Seller starts Stripe Connect onboarding.
+4. Stripe securely collects identity + payout details.
+5. Seller returns to SANDMAN and SANDMAN refreshes payout status.
+6. Seller accepts the SANDMAN commission and publishes a listing.
+7. Buyer pays a marketplace cart through Stripe.
+8. SANDMAN records its commission and transfers the seller net amount to the seller's connected Stripe account.
+
+SANDMAN intentionally does **not** accept raw bank account or payout debit-card details directly.
+
+## Syncee workflow
+
+Syncee's public custom-platform documentation currently exposes supplier-side order webhooks, not a public retailer-side catalog/order submission API for arbitrary custom stores. V1.3 therefore does not fake an undocumented API.
+
+For SANDMAN products linked to a `SYNCEE` supplier:
+
+1. Customer payment succeeds.
+2. SANDMAN creates a Syncee fulfillment handoff and keeps the order in processing.
+3. Admin opens **Fulfillment → SYNCEE**.
+4. Admin completes the supplier payment/forwarding inside Syncee.
+5. Admin enters the carrier/tracking number back into SANDMAN.
+
+If Syncee grants your account a private/custom retailer API later, the `SynceeSupplierAdapter` is the single place to replace the manual handoff with true API submission.
+
+## V1.3.1 hardening
+- Marketplace inventory is atomically reserved at checkout and restored if payment initialization fails.
+- Stripe webhook events verify PaymentIntent id, order amount, currency and provider before fulfillment.
+- PayPal capture verifies SANDMAN order identity, invoice and captured amount.
+- Seller payouts are prepared at payment time but only become transferable after seller shipment.
+- Stripe Connect transfers use idempotency keys and can be retried from the admin API.
+- Supplier fulfillment is unique per order/supplier and failed submissions can be retried.
+- Mixed marketplace + dropship order status is recomputed consistently.
+- Access JWTs stay in memory; persistent login uses a Secure/HttpOnly refresh-session cookie.
+- Logout/password changes revoke server-side sessions so old access tokens stop working.

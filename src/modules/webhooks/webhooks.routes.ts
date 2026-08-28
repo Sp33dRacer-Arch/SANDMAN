@@ -6,7 +6,7 @@ import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { getStripe } from '../../services/stripe.service';
-import { submitPaidOrderToSuppliers } from '../../services/fulfillment.service';
+import { finalizePaidOrder } from '../../services/payment-finalization.service';
 
 export const webhooksRouter = Router();
 
@@ -38,9 +38,15 @@ webhooksRouter.post('/stripe', express.raw({ type: 'application/json' }), asyncH
       const intent = event.data.object as Stripe.PaymentIntent;
       const orderId = intent.metadata.orderId;
       if (orderId) {
-        await prisma.order.update({ where: { id: orderId }, data: { paymentStatus: 'PAID', status: 'PAID' } });
-        await prisma.orderEvent.create({ data: { orderId, type: 'PAYMENT_SUCCEEDED', message: 'Payment captured successfully' } });
-        await submitPaidOrderToSuppliers(orderId);
+        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        if (!order
+          || order.stripePaymentIntentId !== intent.id
+          || order.paymentProvider !== 'stripe'
+          || order.totalCents !== intent.amount
+          || order.currency.toLowerCase() !== intent.currency.toLowerCase()) {
+          throw new HttpError(409, 'Stripe payment does not match the SANDMAN order');
+        }
+        await finalizePaidOrder({ orderId, provider: 'stripe', message: 'Stripe payment captured successfully' });
       }
     }
 
@@ -48,8 +54,17 @@ webhooksRouter.post('/stripe', express.raw({ type: 'application/json' }), asyncH
       const intent = event.data.object as Stripe.PaymentIntent;
       const orderId = intent.metadata.orderId;
       if (orderId) {
-        await prisma.order.update({ where: { id: orderId }, data: { paymentStatus: 'FAILED', status: 'FAILED' } });
-        await prisma.orderEvent.create({ data: { orderId, type: 'PAYMENT_FAILED', message: 'Payment failed' } });
+        const order = await prisma.order.findUnique({ where: { id: orderId } });
+        if (order?.stripePaymentIntentId === intent.id && order.paymentStatus !== 'PAID') {
+          await prisma.order.update({ where: { id: orderId }, data: { paymentStatus: 'FAILED', status: 'PENDING_PAYMENT' } });
+          await prisma.orderEvent.create({
+            data: {
+              orderId,
+              type: 'PAYMENT_FAILED',
+              message: intent.last_payment_error?.message?.slice(0, 500) || 'Stripe payment attempt failed; customer may retry',
+            },
+          });
+        }
       }
     }
 

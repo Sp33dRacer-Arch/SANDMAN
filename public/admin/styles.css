@@ -261,3 +261,6 @@ td strong { color: var(--text); font-size: 10px; font-weight: 700; }
   .global-search-wrap input { padding-right: 12px; }
   #quick-add-button { padding: 0 10px; }
 }
+
+/* V1.3 security + payments */
+.status-stack,.button-stack{display:grid;gap:8px}.status-stack span{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;color:var(--muted);font-size:9px}.status-stack b{color:var(--text);font-size:9px}.button-stack .btn{justify-content:center;text-decoration:none}

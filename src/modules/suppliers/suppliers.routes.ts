@@ -1,10 +1,13 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth, requireRole } from '../../middleware/auth';
 import { supplierAdapterFor } from '../../services/supplier-registry';
+import { submitPaidOrderToSuppliers } from '../../services/fulfillment.service';
+import { recomputeOrderFulfillmentStatus } from '../../services/order-lifecycle.service';
 
 export const suppliersRouter = Router();
 suppliersRouter.use(requireAuth, requireRole('ADMIN', 'STAFF'));
@@ -44,11 +47,46 @@ suppliersRouter.post('/fulfillments/:id/refresh', asyncHandler(async (req, res) 
     },
   });
 
-  const all = await prisma.fulfillment.findMany({ where: { orderId: fulfillment.orderId } });
-  if (all.length && all.every(f => f.status === 'DELIVERED')) {
-    await prisma.order.update({ where: { id: fulfillment.orderId }, data: { status: 'FULFILLED' } });
-  } else if (all.some(f => f.status === 'SHIPPED' || f.status === 'DELIVERED')) {
-    await prisma.order.update({ where: { id: fulfillment.orderId }, data: { status: 'PARTIALLY_FULFILLED' } });
-  }
+  await recomputeOrderFulfillmentStatus(fulfillment.orderId);
   res.json(updated);
+}));
+
+
+suppliersRouter.patch('/fulfillments/:id/manual', asyncHandler(async (req, res) => {
+  const body = z.object({
+    status: z.enum(['PROCESSING', 'SHIPPED', 'DELIVERED', 'CANCELLED']).optional(),
+    trackingNumber: z.string().min(2).max(160).optional(),
+    trackingUrl: z.string().url().optional(),
+    carrier: z.string().min(2).max(100).optional(),
+  }).parse(req.body);
+  const fulfillment = await prisma.fulfillment.findUnique({ where: { id: routeParam(req.params.id, 'id') } });
+  if (!fulfillment) throw new HttpError(404, 'Fulfillment not found');
+  const status = body.status ?? (body.trackingNumber ? 'SHIPPED' : fulfillment.status);
+  const updated = await prisma.fulfillment.update({
+    where: { id: fulfillment.id },
+    data: {
+      status,
+      trackingNumber: body.trackingNumber,
+      trackingUrl: body.trackingUrl,
+      carrier: body.carrier,
+      shippedAt: status === 'SHIPPED' && !fulfillment.shippedAt ? new Date() : fulfillment.shippedAt,
+      deliveredAt: status === 'DELIVERED' && !fulfillment.deliveredAt ? new Date() : fulfillment.deliveredAt,
+    },
+  });
+  await prisma.orderEvent.create({
+    data: { orderId: fulfillment.orderId, type: 'MANUAL_FULFILLMENT_UPDATE', message: `Fulfillment manually updated to ${status}` },
+  });
+  await recomputeOrderFulfillmentStatus(fulfillment.orderId);
+  res.json(updated);
+}));
+
+suppliersRouter.post('/fulfillments/:id/retry', asyncHandler(async (req, res) => {
+  const fulfillment = await prisma.fulfillment.findUnique({
+    where: { id: routeParam(req.params.id, 'id') },
+    include: { order: true },
+  });
+  if (!fulfillment) throw new HttpError(404, 'Fulfillment not found');
+  if (fulfillment.order.paymentStatus !== 'PAID') throw new HttpError(409, 'Order is not paid');
+  const results = await submitPaidOrderToSuppliers(fulfillment.orderId, { retryFailed: true });
+  res.json(results);
 }));
