@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b0b0a" />
+  <title>SANDMAN — Admin</title>
+  <link rel="stylesheet" href="/admin/styles.css" />
+</head>
+<body>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+
+  <section id="login-view" class="login-view">
+    <div class="login-noise"></div>
+    <div class="login-shell">
+      <div class="login-brand">
+        <div class="brand-mark brand-mark-xl" aria-hidden="true"><span>S</span></div>
+        <div>
+          <div class="eyebrow">ENGINE PARTS / OPERATIONS</div>
+          <h1>SANDMAN</h1>
+        </div>
+      </div>
+      <div class="login-copy">
+        <p>Control inventory, vehicle fitment, suppliers, orders and fulfillment from one cockpit.</p>
+      </div>
+      <form id="login-form" class="login-form">
+        <label>
+          <span>Email</span>
+          <input id="login-email" type="email" value="admin@sandman.local" autocomplete="username" required />
+        </label>
+        <label>
+          <span>Password</span>
+          <input id="login-password" type="password" value="SandmanAdmin123!" autocomplete="current-password" required />
+        </label>
+        <button id="login-button" type="submit" class="btn btn-primary btn-wide">
+          <span>Enter dashboard</span><span aria-hidden="true">→</span>
+        </button>
+        <p id="login-error" class="form-error" hidden></p>
+      </form>
+      <div class="login-meta">
+        <span><i class="status-dot"></i> API <b id="login-api-status">checking</b></span>
+        <span>ADMIN V1.1</span>
+      </div>
+    </div>
+  </section>
+
+  <div id="app-shell" class="app-shell" hidden>
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-mark"><span>S</span></div>
+        <div><strong>SANDMAN</strong><small>ADMIN CONSOLE</small></div>
+      </div>
+
+      <nav id="main-nav" class="main-nav" aria-label="Admin navigation">
+        <button class="nav-item active" data-view="overview"><span class="nav-icon">⌁</span><span>Overview</span></button>
+        <button class="nav-item" data-view="products"><span class="nav-icon">◇</span><span>Products</span><span id="nav-products-count" class="nav-count"></span></button>
+        <button class="nav-item" data-view="orders"><span class="nav-icon">▤</span><span>Orders</span><span id="nav-orders-count" class="nav-count"></span></button>
+        <button class="nav-item" data-view="inventory"><span class="nav-icon">▦</span><span>Inventory</span></button>
+        <button class="nav-item" data-view="suppliers"><span class="nav-icon">⇄</span><span>Suppliers</span></button>
+        <button class="nav-item" data-view="vehicles"><span class="nav-icon">⌁</span><span>Fitment</span></button>
+        <button class="nav-item" data-view="fulfillment"><span class="nav-icon">↗</span><span>Fulfillment</span></button>
+        <button class="nav-item" data-view="customers"><span class="nav-icon">◉</span><span>Customers</span></button>
+      </nav>
+
+      <div class="sidebar-section-label">SYSTEM</div>
+      <nav class="main-nav">
+        <button class="nav-item" data-view="settings"><span class="nav-icon">⚙</span><span>Settings</span></button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="system-health"><i class="status-dot"></i><span>Systems online</span></div>
+        <button id="logout-button" class="user-chip">
+          <span id="user-avatar" class="avatar">SA</span>
+          <span class="user-chip-copy"><strong id="user-name">SANDMAN Admin</strong><small id="user-email">admin@sandman.local</small></span>
+          <span>↗</span>
+        </button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button id="mobile-menu-button" class="icon-btn mobile-only" aria-label="Open menu">☰</button>
+        <div class="global-search-wrap">
+          <span class="search-icon">⌕</span>
+          <input id="global-search" type="search" placeholder="Search SANDMAN…" autocomplete="off" />
+          <kbd>CTRL K</kbd>
+        </div>
+        <div class="topbar-actions">
+          <span id="api-pill" class="api-pill"><i class="status-dot"></i> LIVE API</span>
+          <button id="refresh-button" class="icon-btn" title="Refresh current page">↻</button>
+          <button id="quick-add-button" class="btn btn-primary"><span>＋</span> Add product</button>
+        </div>
+      </header>
+
+      <div class="page-container">
+        <div id="page-heading" class="page-heading"></div>
+        <div id="view-root" class="view-root"></div>
+      </div>
+    </main>
+  </div>
+
+  <div id="modal-root"></div>
+  <script src="/admin/app.js" defer></script>
+</body>
+</html>

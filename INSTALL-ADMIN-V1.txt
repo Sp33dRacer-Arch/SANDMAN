@@ -1,0 +1,25 @@
+SANDMAN ADMIN V1.1 — INSTALL
+============================
+
+You already have the SANDMAN backend running. This patch upgrades that existing project.
+
+1. In the PowerShell window where `npm run dev` is running, press Ctrl+C.
+2. Extract this ZIP.
+3. Copy EVERYTHING inside the extracted patch into:
+   C:\Users\asand\Downloads\SANDMAN-backend
+4. When Windows asks, choose "Replace the files in the destination".
+5. You do NOT need another Prisma migration and you do NOT need npm install again.
+6. In PowerShell, from SANDMAN-backend, run:
+
+   npm run dev
+
+7. Open:
+
+   http://localhost:4000/admin
+
+8. Development login:
+
+   admin@sandman.local
+   SandmanAdmin123!
+
+If the browser had the admin page open during the update, press Ctrl+F5 after restarting the backend.

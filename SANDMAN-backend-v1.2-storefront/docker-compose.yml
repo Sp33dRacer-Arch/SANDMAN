@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sandman-postgres
+    environment:
+      POSTGRES_DB: sandman
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - sandman_pgdata:/var/lib/postgresql/data
+
+volumes:
+  sandman_pgdata:
