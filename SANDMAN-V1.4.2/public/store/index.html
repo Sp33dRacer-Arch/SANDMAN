@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#070707" />
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
+  <meta name="description" content="SANDMAN — a marketplace for engine parts. Buy supplier-stocked parts and list your own." />
+  <title>SANDMAN — Engine Parts Marketplace</title>
+  <link rel="stylesheet" href="/store/styles.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <header class="site-header" id="siteHeader">
+    <a class="wordmark" href="#/" aria-label="SANDMAN home">
+      <span class="wordmark-eye">◉</span>
+      <span>SANDMAN</span>
+    </a>
+    <nav class="desktop-nav" aria-label="Primary">
+      <a href="#/shop">Shop</a>
+      <a href="#/shop?source=DROPSHIP">Supplier Stock</a>
+      <a href="#/shop?source=MARKETPLACE">Marketplace</a>
+      <a href="#/garage">My Garage</a>
+      <a href="#/builds">Builds</a>
+      <a href="#/sell">Sell a Part</a>
+    </nav>
+    <div class="header-actions">
+      <button class="icon-btn" id="searchToggle" aria-label="Search" title="Search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
+      </button>
+      <button class="icon-btn notification-btn" id="notificationButton" aria-label="Notifications" title="Notifications">
+        <span aria-hidden="true">◌</span><span class="notification-dot" id="notificationDot" hidden></span>
+      </button>
+      <button class="text-btn" id="accountButton">Account</button>
+      <button class="cart-btn" id="cartButton" aria-label="Open cart">
+        <span>Bag</span><span class="cart-count" id="cartCount">0</span>
+      </button>
+      <button class="mobile-menu-btn" id="mobileMenuButton" aria-label="Open menu"><span></span><span></span></button>
+    </div>
+  </header>
+
+  <div class="search-panel" id="searchPanel" aria-hidden="true">
+    <form id="globalSearchForm" class="search-panel-inner">
+      <span class="eyebrow">SEARCH SANDMAN</span>
+      <input id="globalSearchInput" type="search" autocomplete="off" placeholder="B58 intake, 2JZ, turbo, part number..." />
+      <button type="submit" class="arrow-btn" aria-label="Search">↗</button>
+    </form>
+    <div id="searchSuggestions" class="search-suggestions"></div>
+  </div>
+
+  <aside class="mobile-menu" id="mobileMenu" aria-hidden="true">
+    <button class="close-x" id="mobileMenuClose" aria-label="Close menu">×</button>
+    <nav>
+      <a href="#/shop">Shop all</a>
+      <a href="#/shop?source=DROPSHIP">Supplier stock</a>
+      <a href="#/shop?source=MARKETPLACE">Marketplace</a>
+      <a href="#/garage">My Garage</a>
+      <a href="#/builds">Builds</a>
+      <a href="#/wishlist">Wishlist</a>
+      <a href="#/messages">Messages</a>
+      <a href="#/sell">Sell a part</a>
+      <a href="#/seller">Seller dashboard</a>
+      <a href="/admin">Admin</a>
+    </nav>
+  </aside>
+
+  <main id="app" tabindex="-1"></main>
+
+  <footer class="site-footer">
+    <div class="footer-brand">
+      <img src="/assets/sandman-logo.png" alt="SANDMAN Dream While Awake" />
+      <p>Engine parts. Supplier stock. Independent sellers. One marketplace.</p>
+    </div>
+    <div class="footer-links">
+      <div><span>MARKET</span><a href="#/shop">Shop all</a><a href="#/shop?source=DROPSHIP">Supplier stock</a><a href="#/shop?source=MARKETPLACE">Seller listings</a></div>
+      <div><span>SELL</span><a href="#/sell">List a part</a><a href="#/seller">Seller dashboard</a><a href="#/account">Account</a></div>
+      <div><span>SANDMAN</span><a href="#/buyer-protection">Buyer protection</a><a href="#/shipping">Shipping</a><a href="#/returns">Returns</a><a href="#/terms">Terms</a><a href="#/privacy">Privacy</a><a href="#/about">About</a></div>
+    </div>
+    <div class="footer-bottom"><span>© 2026 SANDMAN</span><span>DREAM WHILE AWAKE</span></div>
+  </footer>
+
+  <div class="backdrop" id="backdrop"></div>
+
+  <aside class="cart-drawer" id="cartDrawer" aria-hidden="true">
+    <div class="drawer-head"><div><span class="eyebrow">YOUR BAG</span><h2>Cart</h2></div><button class="close-x" id="cartClose" aria-label="Close cart">×</button></div>
+    <div id="cartItems" class="cart-items"></div>
+    <div class="cart-footer" id="cartFooter"></div>
+  </aside>
+
+  <section class="modal auth-modal" id="authModal" aria-hidden="true" aria-modal="true" role="dialog">
+    <button class="close-x modal-close" id="authClose" aria-label="Close">×</button>
+    <div class="auth-brand"><img src="/assets/sandman-logo.png" alt="SANDMAN" /></div>
+    <div class="auth-content">
+      <div class="auth-tabs"><button class="active" data-auth-tab="login">Log in</button><button data-auth-tab="register">Create account</button></div>
+      <form id="loginForm" class="auth-form">
+        <label>Email<input name="email" type="email" required placeholder="you@example.com" /></label>
+        <label>Password<input name="password" type="password" required placeholder="••••••••" /></label>
+        <button class="primary-btn wide" type="submit">Log in</button>
+        <button class="link-button" id="forgotPasswordButton" type="button">Forgot password?</button><p class="form-note">Your account lets you buy, sell, track orders and manage listings.</p>
+      </form>
+      <form id="registerForm" class="auth-form hidden">
+        <div class="field-row"><label>First name<input name="firstName" required /></label><label>Last name<input name="lastName" required /></label></div>
+        <label>Email<input name="email" type="email" required /></label>
+        <label>Password<input name="password" type="password" minlength="8" required /></label>
+        <button class="primary-btn wide" type="submit">Create SANDMAN account</button>
+      </form>
+    </div>
+  </section>
+
+  <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+    <a href="#/">Home</a><a href="#/shop">Shop</a><a href="#/garage">Garage</a><a href="#/builds">Builds</a><button id="mobileAccountButton" type="button">Account</button>
+  </nav>
+
+  <script src="/store/app.js" defer></script>
+</body>
+</html>
