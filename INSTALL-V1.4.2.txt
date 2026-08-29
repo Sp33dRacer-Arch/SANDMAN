@@ -1,0 +1,57 @@
+SANDMAN V1.4.2 - SAFE LOCAL VERIFY / DEPLOY ORDER
+
+DO NOT deploy this straight to the live Railway service.
+
+1) Back up your current live project/repository.
+2) Extract V1.4.2 into a separate folder.
+3) Copy your own .env values into the new folder. Never share or commit secrets.
+
+4) In PowerShell run:
+   npm install
+   npx prisma generate
+   npx prisma validate
+   npm run typecheck
+   npm test
+   npm run build
+
+   Or run:
+   .\VERIFY-V1.4.2.ps1
+
+5) npm install should create package-lock.json. Keep it after all checks pass.
+
+6) Test migrations on a TEST/STAGING PostgreSQL database:
+   npm run prisma:deploy
+
+7) Test these V1.4.2-specific flows:
+   - accepted offer -> quantity remains 1 -> checkout
+   - try to force offer quantity 2 -> backend must reject it
+   - dropship item with stock 1 -> open two checkouts -> only one can reserve it
+   - cancel/expire the winning unpaid checkout -> stock becomes available again
+   - supplier feed update while a checkout is reserved -> reservation remains deducted
+   - paid dropship order -> supplier submission -> reservation commits once
+   - fully refund a dropship line before supplier submission -> reservation is released
+   - mixed order with a refunded supplier line -> order must not become fulfilled early
+
+8) Also retest:
+   - login / refresh / logout / password reset / 2FA
+   - My Garage + fitment + search
+   - cart + promo + Stripe/PayPal sandbox checkout
+   - marketplace seller shipping + payout hold
+   - buyer-protection case + partial/full refund + payout adjustment
+   - supplier stock/pricing feed with AUTO_PRICE_SUPPLIER_FEEDS=false first
+   - admin finance totals
+
+9) Recommended production values:
+   MARKETPLACE_PAYOUT_DELAY_DAYS=7
+   CHECKOUT_RESERVATION_MINUTES=30
+   BANK_TRANSFER_RESERVATION_HOURS=48
+   AUTO_PRICE_SUPPLIER_FEEDS=false
+
+10) Before real supplier orders, replace DEFAULT_SUPPLIER=mock with your approved supplier setup.
+
+11) Only after local + staging checks pass, commit and push. Railway should run:
+   build:      npm run prisma:generate && npm run build
+   predeploy:  npm run prisma:deploy
+   start:      node dist/src/server.js
+
+Do not run db:seed on production unless you intentionally want demo data there.

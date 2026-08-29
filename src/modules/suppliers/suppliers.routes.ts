@@ -8,6 +8,8 @@ import { requireAuth, requireRole } from '../../middleware/auth';
 import { supplierAdapterFor } from '../../services/supplier-registry';
 import { submitPaidOrderToSuppliers } from '../../services/fulfillment.service';
 import { recomputeOrderFulfillmentStatus } from '../../services/order-lifecycle.service';
+import { createNotification } from '../../services/notification.service';
+import { sendEmail } from '../../services/email.service';
 
 export const suppliersRouter = Router();
 suppliersRouter.use(requireAuth, requireRole('ADMIN', 'STAFF'));
@@ -48,6 +50,11 @@ suppliersRouter.post('/fulfillments/:id/refresh', asyncHandler(async (req, res) 
   });
 
   await recomputeOrderFulfillmentStatus(fulfillment.orderId);
+  if (status === 'SHIPPED' || status === 'DELIVERED') {
+    const order = await prisma.order.findUnique({ where: { id: fulfillment.orderId }, select: { orderNumber: true, userId: true, email: true } });
+    if (order?.userId) await createNotification({ userId: order.userId, type: 'SHIPPING', title: status === 'SHIPPED' ? 'Order shipped' : 'Order delivered', body: `Order ${order.orderNumber} is ${status.toLowerCase()}.`, link: `#/order/${order.orderNumber}` }).catch(() => undefined);
+    if (order) await sendEmail({ to: order.email, subject: `SANDMAN order ${order.orderNumber}: ${status.toLowerCase()}`, text: `Your order ${order.orderNumber} is ${status.toLowerCase()}.`, type: 'SHIPPING' }).catch(() => undefined);
+  }
   res.json(updated);
 }));
 
@@ -77,6 +84,11 @@ suppliersRouter.patch('/fulfillments/:id/manual', asyncHandler(async (req, res) 
     data: { orderId: fulfillment.orderId, type: 'MANUAL_FULFILLMENT_UPDATE', message: `Fulfillment manually updated to ${status}` },
   });
   await recomputeOrderFulfillmentStatus(fulfillment.orderId);
+  if (status === 'SHIPPED' || status === 'DELIVERED') {
+    const order = await prisma.order.findUnique({ where: { id: fulfillment.orderId }, select: { orderNumber: true, userId: true, email: true } });
+    if (order?.userId) await createNotification({ userId: order.userId, type: 'SHIPPING', title: status === 'SHIPPED' ? 'Order shipped' : 'Order delivered', body: `Order ${order.orderNumber} is ${status.toLowerCase()}.`, link: `#/order/${order.orderNumber}` }).catch(() => undefined);
+    if (order) await sendEmail({ to: order.email, subject: `SANDMAN order ${order.orderNumber}: ${status.toLowerCase()}`, text: `Your order ${order.orderNumber} is ${status.toLowerCase()}.`, type: 'SHIPPING' }).catch(() => undefined);
+  }
   res.json(updated);
 }));
 
@@ -86,7 +98,7 @@ suppliersRouter.post('/fulfillments/:id/retry', asyncHandler(async (req, res) =>
     include: { order: true },
   });
   if (!fulfillment) throw new HttpError(404, 'Fulfillment not found');
-  if (fulfillment.order.paymentStatus !== 'PAID') throw new HttpError(409, 'Order is not paid');
+  if (!['PAID', 'PARTIALLY_REFUNDED'].includes(fulfillment.order.paymentStatus)) throw new HttpError(409, 'Order is not paid');
   const results = await submitPaidOrderToSuppliers(fulfillment.orderId, { retryFailed: true });
   res.json(results);
 }));

@@ -55,8 +55,19 @@ webhooksRouter.post('/stripe', express.raw({ type: 'application/json' }), asyncH
       const orderId = intent.metadata.orderId;
       if (orderId) {
         const order = await prisma.order.findUnique({ where: { id: orderId } });
-        if (order?.stripePaymentIntentId === intent.id && order.paymentStatus !== 'PAID') {
-          await prisma.order.update({ where: { id: orderId }, data: { paymentStatus: 'FAILED', status: 'PENDING_PAYMENT' } });
+        if (order?.stripePaymentIntentId === intent.id
+          && order.status === 'PENDING_PAYMENT'
+          && !order.marketplaceStockReleasedAt
+          && ['PENDING', 'AUTHORIZED', 'FAILED'].includes(order.paymentStatus)) {
+          await prisma.order.updateMany({
+            where: {
+              id: orderId,
+              status: 'PENDING_PAYMENT',
+              marketplaceStockReleasedAt: null,
+              paymentStatus: { in: ['PENDING', 'AUTHORIZED', 'FAILED'] },
+            },
+            data: { paymentStatus: 'FAILED' },
+          });
           await prisma.orderEvent.create({
             data: {
               orderId,

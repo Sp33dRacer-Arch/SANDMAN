@@ -55,3 +55,28 @@ export async function capturePayPalOrder(paypalOrderId: string) {
   if (!response.ok) throw new HttpError(502, data?.message || 'PayPal capture failed');
   return data;
 }
+
+export async function refundPayPalOrder(paypalOrderId: string, amountCents: number, currency: string, requestId?: string) {
+  const token = await accessToken();
+  const orderResponse = await fetch(`${baseUrl()}/v2/checkout/orders/${encodeURIComponent(paypalOrderId)}`, {
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+  });
+  const order = await orderResponse.json() as any;
+  if (!orderResponse.ok) throw new HttpError(502, order?.message || 'Unable to load PayPal order for refund');
+  const captureId = order?.purchase_units?.flatMap((u: any) => u?.payments?.captures ?? [])?.[0]?.id;
+  if (!captureId) throw new HttpError(409, 'PayPal capture ID is unavailable for this order');
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+    Prefer: 'return=representation',
+  };
+  if (requestId) headers['PayPal-Request-Id'] = requestId;
+  const response = await fetch(`${baseUrl()}/v2/payments/captures/${encodeURIComponent(captureId)}/refund`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ amount: { currency_code: currency.toUpperCase(), value: (amountCents / 100).toFixed(2) } }),
+  });
+  const data = await response.json() as any;
+  if (!response.ok || !data?.id) throw new HttpError(502, data?.message || 'PayPal refund failed');
+  return data;
+}

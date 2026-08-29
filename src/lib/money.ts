@@ -13,7 +13,7 @@ export function calculateOrderTotals(input: {
   taxRate: number;
   discountCents?: number;
 }) {
-  const discountCents = Math.max(0, input.discountCents ?? 0);
+  const discountCents = Math.max(0, Math.min(input.discountCents ?? 0, input.subtotalCents));
   const discountedSubtotal = Math.max(0, input.subtotalCents - discountCents);
   const shippingCents = discountedSubtotal >= input.freeShippingThresholdCents
     ? 0

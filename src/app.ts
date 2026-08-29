@@ -18,6 +18,14 @@ import { healthRouter } from './modules/health/health.routes';
 import { marketplaceRouter } from './modules/marketplace/marketplace.routes';
 import { paymentsRouter } from './modules/payments/payments.routes';
 import { errorHandler, notFound } from './middleware/error-handler';
+import { experienceRouter } from './modules/experience/experience.routes';
+import { reviewsRouter } from './modules/reviews/reviews.routes';
+import { buildsRouter } from './modules/builds/builds.routes';
+import { communityRouter } from './modules/community/community.routes';
+import { supportRouter } from './modules/support/support.routes';
+import { securityRouter } from './modules/security/security.routes';
+import { opsRouter } from './modules/ops/ops.routes';
+import { supplierFeedRouter } from './modules/supplier-feed/supplier-feed.routes';
 
 export const app = express();
 
@@ -45,6 +53,13 @@ app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }));
 
+// Authentication endpoints need a much tighter ceiling than normal browsing.
+const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false });
+const recoveryLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
+app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/forgot-password', recoveryLimiter);
+app.use('/api/auth/reset-password', recoveryLimiter);
+
 const adminUiDir = path.join(process.cwd(), 'public', 'admin');
 const storeUiDir = path.join(process.cwd(), 'public', 'store');
 app.use('/admin', express.static(adminUiDir, { index: 'index.html' }));
@@ -54,8 +69,8 @@ app.use('/assets', express.static(path.join(storeUiDir, 'assets')));
 
 app.get('/api', (_req, res) => res.json({
   name: 'SANDMAN',
-  description: 'Engine-parts marketplace and dropshipping API',
-  version: '1.3.1',
+  description: 'Automotive parts marketplace, builds, fitment, dropshipping and seller platform',
+  version: '1.4.2',
   health: '/api/health',
   admin: '/admin',
   storefront: '/',
@@ -74,6 +89,14 @@ app.use('/api/cart', cartRouter);
 app.use('/api/orders', ordersRouter);
 app.use('/api/admin', adminRouter);
 app.use('/api/admin/suppliers', suppliersRouter);
+app.use('/api/experience', experienceRouter);
+app.use('/api/reviews', reviewsRouter);
+app.use('/api/builds', buildsRouter);
+app.use('/api/community', communityRouter);
+app.use('/api/support', supportRouter);
+app.use('/api/security', securityRouter);
+app.use('/api/admin/ops', opsRouter);
+app.use('/api/supplier-feed', supplierFeedRouter);
 
 app.use(notFound);
 app.use(errorHandler);

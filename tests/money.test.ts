@@ -20,3 +20,13 @@ describe('calculateOrderTotals', () => {
     }).totalCents).toBe(33000);
   });
 });
+
+it('caps a discount at the subtotal', () => {
+  expect(calculateOrderTotals({
+    subtotalCents: 1000,
+    freeShippingThresholdCents: 25000,
+    flatShippingCents: 0,
+    taxRate: 0,
+    discountCents: 5000,
+  })).toEqual({ subtotalCents: 1000, discountCents: 1000, shippingCents: 0, taxCents: 0, totalCents: 0 });
+});

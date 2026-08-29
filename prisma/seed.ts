@@ -6,6 +6,10 @@ const prisma = new PrismaClient();
 const demoImage = (label: string) => `https://placehold.co/1200x900/0a0a0a/e8d9c6?text=${encodeURIComponent(label)}`;
 
 async function main() {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true') {
+    throw new Error('Refusing to seed demo accounts/data in production. Set ALLOW_DEMO_SEED=true only if you intentionally want the demo seed.');
+  }
+
   const adminPassword = await bcrypt.hash('SandmanAdmin123!', 12);
   await prisma.user.upsert({
     where: { email: 'admin@sandman.local' },
@@ -32,6 +36,12 @@ async function main() {
       role: 'CUSTOMER',
       cart: { create: {} },
     },
+  });
+
+  await prisma.sellerProfile.upsert({
+    where: { userId: demoSeller.id },
+    update: { storeName: 'Nightshift Performance', bio: 'Demo verified marketplace seller for SANDMAN development and testing.', location: 'South Africa', responseTimeHours: 4 },
+    create: { userId: demoSeller.id, storeName: 'Nightshift Performance', bio: 'Demo verified marketplace seller for SANDMAN development and testing.', location: 'South Africa', verified: true, responseTimeHours: 4 },
   });
 
   const categoryDefs = [
@@ -107,7 +117,7 @@ async function main() {
   for (const def of dropshipDefs) {
     const product = await prisma.product.upsert({
       where: { sku: def.sku },
-      update: { sourceType: 'DROPSHIP', condition: 'NEW', requiresFitment: false },
+      update: { sourceType: 'DROPSHIP', condition: 'NEW', requiresFitment: false, warrantyText: '12-month limited supplier warranty where applicable.', returnDays: 30, installDifficulty: 'INTERMEDIATE', shippingMinDays: 4, shippingMaxDays: 10, specs: { source: 'demo', category: def.category } },
       create: {
         sku: def.sku,
         slug: def.slug,
@@ -123,6 +133,14 @@ async function main() {
         condition: 'NEW',
         requiresFitment: false,
         isUniversal: ('universal' in def && def.universal) || def.fitments.length === 0,
+        warrantyText: '12-month limited supplier warranty where applicable.',
+        returnDays: 30,
+        installDifficulty: 'INTERMEDIATE',
+        shippingMinDays: 4,
+        shippingMaxDays: 10,
+        specs: { source: 'demo', category: def.category },
+        seoTitle: `${def.name} | SANDMAN`,
+        seoDescription: def.desc,
         images: { create: [{ url: demoImage(def.name), alt: def.name, position: 0 }] },
         ...(def.fitments.length ? { fitments: { create: def.fitments.map(vehicleVariantId => ({ vehicleVariantId })) } } : {}),
       },
@@ -130,8 +148,8 @@ async function main() {
 
     await prisma.supplierProduct.upsert({
       where: { supplierId_supplierProductId: { supplierId: mockSupplier.id, supplierProductId: def.supplierId } },
-      update: { productId: product.id, costCents: def.cost, shippingCents: def.ship, stock: 100, active: true },
-      create: { supplierId: mockSupplier.id, productId: product.id, supplierProductId: def.supplierId, costCents: def.cost, shippingCents: def.ship, stock: 100 },
+      update: { productId: product.id, costCents: def.cost, shippingCents: def.ship, stock: 100, reservedStock: 0, availableStock: 100, active: true },
+      create: { supplierId: mockSupplier.id, productId: product.id, supplierProductId: def.supplierId, costCents: def.cost, shippingCents: def.ship, stock: 100, availableStock: 100 },
     });
   }
 
@@ -143,7 +161,7 @@ async function main() {
   for (const def of marketplaceDefs) {
     await prisma.product.upsert({
       where: { sku: def.sku },
-      update: { sourceType: 'MARKETPLACE', sellerId: demoSeller.id, stockQuantity: def.stock },
+      update: { sourceType: 'MARKETPLACE', sellerId: demoSeller.id, stockQuantity: def.stock, returnDays: 7, installDifficulty: 'VERIFY_APPLICATION', shippingMinDays: 2, shippingMaxDays: 7 },
       create: {
         sku: def.sku,
         slug: def.slug,
@@ -162,14 +180,30 @@ async function main() {
         sellerLocation: def.location,
         requiresFitment: false,
         isUniversal: true,
+        returnDays: 7,
+        installDifficulty: 'VERIFY_APPLICATION',
+        shippingMinDays: 2,
+        shippingMaxDays: 7,
+        seoTitle: `${def.name} | SANDMAN Marketplace`,
+        seoDescription: def.desc,
         images: { create: [{ url: demoImage(def.name), alt: def.name, position: 0 }] },
       },
     });
   }
 
+  await prisma.promoCode.upsert({
+    where: { code: 'DREAM10' },
+    update: {},
+    create: { code: 'DREAM10', percentOff: 10, minimumCents: 5000, maxUses: 100, active: true },
+  });
+
+  const defaultPricing = await prisma.pricingRule.findFirst({ where: { name: 'SANDMAN default dropship margin' } });
+  if (!defaultPricing) {
+    await prisma.pricingRule.create({ data: { name: 'SANDMAN default dropship margin', markupPercent: 35, minimumProfitCents: 2500, priority: 500, active: true } });
+  }
+
   console.log('SANDMAN marketplace seed complete');
-  console.log('Admin login: admin@sandman.local / SandmanAdmin123!');
-  console.log('Demo seller: seller@sandman.local / SellerDemo123!');
+  console.log('Demo accounts created/verified for local or staging use. Change/remove demo credentials before any real launch.');
 }
 
 main().catch(error => {

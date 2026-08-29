@@ -1,13 +1,15 @@
 import { prisma } from '../lib/prisma';
 import { HttpError } from '../lib/http-error';
+import { env } from '../config/env';
 
 export async function chooseSupplierForProduct(productId: string, quantity: number) {
   const links = await prisma.supplierProduct.findMany({
     where: {
       productId,
       active: true,
+      currency: env.CURRENCY.toUpperCase(),
       supplier: { active: true },
-      OR: [{ stock: null }, { stock: { gte: quantity } }],
+      OR: [{ availableStock: null }, { availableStock: { gte: quantity } }],
     },
     include: { supplier: true },
     orderBy: [
@@ -17,5 +19,7 @@ export async function chooseSupplierForProduct(productId: string, quantity: numb
     ],
   });
   if (!links.length) throw new HttpError(409, 'No supplier can currently fulfill this product');
-  return links[0]!;
+  const preferredCode = env.DEFAULT_SUPPLIER.trim().toLowerCase();
+  const preferred = links.find(link => link.supplier.code.trim().toLowerCase() === preferredCode);
+  return preferred ?? links[0]!;
 }

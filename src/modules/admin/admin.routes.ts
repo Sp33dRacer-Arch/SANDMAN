@@ -6,9 +6,11 @@ import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth, requireRole } from '../../middleware/auth';
 import { finalizePaidOrder } from '../../services/payment-finalization.service';
-import { releaseMarketplaceStock, recomputeOrderFulfillmentStatus } from '../../services/order-lifecycle.service';
+import { recomputeOrderFulfillmentStatus } from '../../services/order-lifecycle.service';
+import { cancelUnpaidCheckout } from '../../services/checkout-reservation.service';
 import { processReadyStripeMarketplacePayouts } from '../../services/marketplace-payout.service';
 import { env } from '../../config/env';
+import { setSupplierReportedStock } from '../../services/supplier-inventory.service';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireRole('ADMIN', 'STAFF'));
@@ -18,10 +20,12 @@ function dayKey(date: Date) {
 }
 
 adminRouter.get('/settings', asyncHandler(async (_req, res) => {
-  const [sessions, payouts] = await Promise.all([
+  const [sessions, paidPayouts, payoutGroups] = await Promise.all([
     prisma.authSession.count({ where: { revokedAt: null, expiresAt: { gt: new Date() } } }),
-    prisma.sellerPayout.aggregate({ _sum: { amountCents: true, platformFeeCents: true }, _count: true }),
+    prisma.sellerPayout.aggregate({ where: { status: 'PAID' }, _sum: { amountCents: true, platformFeeCents: true }, _count: true }),
+    prisma.sellerPayout.groupBy({ by: ['status'], _sum: { amountCents: true }, _count: true }),
   ]);
+  const payoutByStatus = Object.fromEntries(payoutGroups.map(group => [group.status, group._sum.amountCents ?? 0]));
   res.json({
     environment: env.NODE_ENV,
     appUrl: env.APP_URL,
@@ -36,9 +40,18 @@ adminRouter.get('/settings', asyncHandler(async (_req, res) => {
     marketplace: {
       commissionPercent: env.MARKETPLACE_COMMISSION_PERCENT,
       payoutProvider: 'Stripe Connect',
-      payoutCount: payouts._count,
-      sellerPayoutCents: payouts._sum.amountCents ?? 0,
-      platformFeeCents: payouts._sum.platformFeeCents ?? 0,
+      // Backwards-compatible fields now mean actually-paid money only.
+      payoutCount: paidPayouts._count,
+      sellerPayoutCents: paidPayouts._sum.amountCents ?? 0,
+      platformFeeCents: paidPayouts._sum.platformFeeCents ?? 0,
+      paidPayoutCount: paidPayouts._count,
+      paidSellerPayoutCents: paidPayouts._sum.amountCents ?? 0,
+      paidPlatformFeeCents: paidPayouts._sum.platformFeeCents ?? 0,
+      pendingSellerPayoutCents: payoutByStatus.PENDING ?? 0,
+      readySellerPayoutCents: payoutByStatus.READY ?? 0,
+      processingSellerPayoutCents: payoutByStatus.PROCESSING ?? 0,
+      blockedSellerPayoutCents: payoutByStatus.BLOCKED ?? 0,
+      failedSellerPayoutCents: payoutByStatus.FAILED ?? 0,
     },
     syncee: {
       mode: env.SYNCEE_MODE,
@@ -91,9 +104,9 @@ adminRouter.get('/dashboard', asyncHandler(async (_req, res) => {
       },
     }),
     prisma.supplierProduct.findMany({
-      where: { active: true, stock: { not: null, lte: 10 } },
+      where: { active: true, availableStock: { not: null, lte: 10 } },
       include: { product: { select: { id: true, name: true, sku: true } }, supplier: { select: { name: true } } },
-      orderBy: { stock: 'asc' },
+      orderBy: { availableStock: 'asc' },
       take: 8,
     }),
   ]);
@@ -113,7 +126,8 @@ adminRouter.get('/dashboard', asyncHandler(async (_req, res) => {
       row.revenueCents += order.totalCents;
       row.orders += 1;
     }
-    const supplierCost = order.items.reduce((sum, item) => sum + ((item.supplierCostCents ?? 0) * item.quantity), 0);
+    // supplierCostCents is already stored as the total landed cost for the order line.
+    const supplierCost = order.items.reduce((sum, item) => sum + (item.supplierCostCents ?? 0), 0);
     recentProfitCents += Math.max(0, order.totalCents - supplierCost);
   }
 
@@ -134,7 +148,9 @@ adminRouter.get('/dashboard', asyncHandler(async (_req, res) => {
       product: link.product.name,
       sku: link.product.sku,
       supplier: link.supplier.name,
-      stock: link.stock,
+      stock: link.availableStock,
+      reportedStock: link.stock,
+      reservedStock: link.reservedStock,
     })),
   });
 }));
@@ -208,6 +224,15 @@ const productSchema = z.object({
   currency: z.string().length(3).default('USD'),
   requiresFitment: z.boolean().default(true),
   isUniversal: z.boolean().default(false),
+  warrantyText: z.string().max(1000).optional(),
+  returnDays: z.number().int().min(0).max(365).optional(),
+  installDifficulty: z.string().max(80).optional(),
+  specs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  videoUrl: z.string().url().optional(),
+  shippingMinDays: z.number().int().min(0).max(365).optional(),
+  shippingMaxDays: z.number().int().min(0).max(365).optional(),
+  seoTitle: z.string().max(160).optional(),
+  seoDescription: z.string().max(320).optional(),
   status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).default('DRAFT'),
   images: z.array(z.object({ url: z.string().url(), alt: z.string().optional(), position: z.number().int().default(0) })).default([]),
 });
@@ -297,6 +322,9 @@ adminRouter.get('/orders/:id', asyncHandler(async (req, res) => {
 adminRouter.post('/orders/:id/mark-paid', asyncHandler(async (req, res) => {
   const order = await prisma.order.findUnique({ where: { id: routeParam(req.params.id, 'id') } });
   if (!order) throw new HttpError(404, 'Order not found');
+  if (['REFUNDED', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus)) {
+    throw new HttpError(409, 'A refunded order cannot be marked paid again.');
+  }
   if (order.paymentStatus !== 'PAID') {
     await prisma.orderEvent.create({ data: { orderId: order.id, type: 'ADMIN_MARKED_PAID', message: 'Order manually marked paid by staff' } });
   }
@@ -314,12 +342,13 @@ adminRouter.patch('/orders/:id/status', asyncHandler(async (req, res) => {
   if (!current) throw new HttpError(404, 'Order not found');
 
   if (data.status === 'CANCELLED') {
-    if (current.paymentStatus === 'PAID') {
-      throw new HttpError(409, 'Paid orders cannot be cancelled with a status edit. Refund the payment first.');
+    if (!['PENDING', 'FAILED'].includes(current.paymentStatus)) {
+      throw new HttpError(409, 'Captured/refunded orders cannot be cancelled with a status edit. Use the refund flow when applicable.');
     }
-    await releaseMarketplaceStock(id);
+    await cancelUnpaidCheckout(id);
+    return res.json(await prisma.order.findUnique({ where: { id } }));
   }
-  if (data.status === 'FULFILLED' && current.paymentStatus !== 'PAID') {
+  if (data.status === 'FULFILLED' && !['PAID', 'PARTIALLY_REFUNDED'].includes(current.paymentStatus)) {
     throw new HttpError(409, 'An unpaid order cannot be fulfilled');
   }
 
@@ -417,7 +446,7 @@ adminRouter.delete('/products/:id/fitments/:vehicleVariantId', asyncHandler(asyn
 adminRouter.post('/suppliers', asyncHandler(async (req, res) => {
   const data = z.object({
     name: z.string().min(2),
-    code: z.string().min(2).max(50),
+    code: z.string().trim().min(2).max(50).transform(v => v.toLowerCase()),
     type: z.enum(['MOCK', 'CJ', 'SYNCEE', 'CUSTOM']).default('CUSTOM'),
     priority: z.number().int().min(1).default(100),
     baseUrl: z.string().url().optional(),
@@ -457,7 +486,9 @@ adminRouter.post('/supplier-products', asyncHandler(async (req, res) => {
     currency: z.string().length(3).default('USD'),
     stock: z.number().int().nonnegative().nullable().optional(),
   }).parse(req.body);
-  res.status(201).json(await prisma.supplierProduct.create({ data }));
+  res.status(201).json(await prisma.supplierProduct.create({
+    data: { ...data, availableStock: data.stock ?? null },
+  }));
 }));
 
 adminRouter.patch('/supplier-products/:id', asyncHandler(async (req, res) => {
@@ -467,7 +498,15 @@ adminRouter.patch('/supplier-products/:id', asyncHandler(async (req, res) => {
     stock: z.number().int().nonnegative().nullable().optional(),
     active: z.boolean().optional(),
   }).parse(req.body);
-  res.json(await prisma.supplierProduct.update({ where: { id: routeParam(req.params.id, 'id') }, data }));
+  const id = routeParam(req.params.id, 'id');
+  const { stock, ...metadata } = data;
+  const updated = await prisma.$transaction(async tx => {
+    if (Object.keys(metadata).length) await tx.supplierProduct.update({ where: { id }, data: metadata });
+    if (stock !== undefined) await setSupplierReportedStock(tx, id, stock);
+    return tx.supplierProduct.findUnique({ where: { id } });
+  });
+  if (!updated) throw new HttpError(404, 'Supplier product not found');
+  res.json(updated);
 }));
 
 adminRouter.get('/fulfillments', asyncHandler(async (req, res) => {
@@ -503,7 +542,7 @@ adminRouter.post('/payouts/:orderId/retry', asyncHandler(async (req, res) => {
   const orderId = routeParam(req.params.orderId, 'orderId');
   const order = await prisma.order.findUnique({ where: { id: orderId } });
   if (!order) throw new HttpError(404, 'Order not found');
-  if (order.paymentStatus !== 'PAID') throw new HttpError(409, 'Only paid orders can have marketplace payouts');
+  if (!['PAID', 'PARTIALLY_REFUNDED'].includes(order.paymentStatus)) throw new HttpError(409, 'Only paid orders can have marketplace payouts');
   const payouts = await processReadyStripeMarketplacePayouts(orderId);
   res.json(payouts);
 }));

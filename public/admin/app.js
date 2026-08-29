@@ -179,6 +179,7 @@
       else if (view === 'suppliers') await renderSuppliers();
       else if (view === 'vehicles') await renderVehicles();
       else if (view === 'fulfillment') await renderFulfillment();
+      else if (view === 'operations') await renderOperations();
       else if (view === 'customers') await renderCustomers();
       else if (view === 'settings') await renderSettings();
     } catch (error) {
@@ -332,7 +333,7 @@
         <td>${esc(money(item.shippingCents, item.currency))}</td>
         <td><strong>${esc(money(landed, item.currency))}</strong></td>
         <td><strong>${esc(money(profit, item.currency))}</strong> <span class="subtle">(${margin}%)</span></td>
-        <td>${item.stock === null ? '—' : `<span class="${item.stock <= 10 ? 'stock-number' : ''}">${esc(item.stock)}</span>`}</td>
+        <td>${item.availableStock === null ? '—' : `<span class="${item.availableStock <= 10 ? 'stock-number' : ''}">${esc(item.availableStock)}</span>`}${item.reservedStock ? `<span class="subtle"> · ${esc(item.reservedStock)} reserved</span>` : ''}</td>
         <td>${badge(item.active ? 'ACTIVE' : 'ARCHIVED')}</td>
       </tr>`;
     }).join('') : `<tr><td colspan="9"><div class="empty-state"><div><b>No supplier inventory</b><span>Link a supplier SKU to a SANDMAN product.</span></div></div></td></tr>`;
@@ -390,6 +391,79 @@
     viewRoot.innerHTML = `<div class="toolbar"><div class="toolbar-left"><input id="customer-search" type="search" value="${esc(filters.q || '')}" placeholder="Search customer name or email…" /></div><div class="toolbar-right"><span class="date-chip">${customers.length} CUSTOMERS</span></div></div><section class="data-panel"><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th>Orders</th><th>Garage</th><th>Lifetime spend</th><th>Status</th><th>Joined</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
   }
 
+
+  async function renderOperations() {
+    heading('Operations', 'Money, growth, supplier sync, pricing, promotions, fraud and buyer protection.');
+    const [finance, analytics, flags, promos, rules, suppliers, cases] = await Promise.all([
+      api('/api/admin/ops/finance'),
+      api('/api/admin/ops/analytics'),
+      api('/api/admin/ops/fraud-flags'),
+      api('/api/admin/ops/promos'),
+      api('/api/admin/ops/pricing-rules'),
+      api('/api/admin/ops/suppliers'),
+      api('/api/support/admin/cases'),
+    ]);
+
+    const topProducts = analytics.topProducts?.length ? analytics.topProducts.slice(0, 8).map(product => `
+      <tr><td><strong>${esc(product.name)}</strong><br><span class="subtle">${esc(product.sku)}</span></td><td>${esc(product.viewCount)}</td><td>${esc(product.purchaseCount)}</td><td>${esc(product.wishlistCount)}</td></tr>`).join('') : '<tr><td colspan="4">No product activity yet.</td></tr>';
+    const searches = analytics.searches?.length ? analytics.searches.slice(0, 8).map(search => `
+      <tr><td><strong>${esc(search.query)}</strong></td><td>${esc(search._count?.query || 0)}</td><td>${esc(search._sum?.resultsCount || 0)}</td></tr>`).join('') : '<tr><td colspan="3">No searches tracked yet.</td></tr>';
+    const fraudRows = flags.length ? flags.slice(0, 10).map(flag => `
+      <tr><td><strong>${esc(flag.orderNumber)}</strong><br><span class="subtle">${esc(flag.email)}</span></td><td>${esc(money(flag.totalCents))}</td><td>${flag.reasons.map(reason => badge(reason)).join(' ')}</td><td class="text-right"><button class="table-action" data-action="view-order" data-id="${esc(flag.orderId)}">OPEN →</button></td></tr>`).join('') : '<tr><td colspan="4"><div class="empty-state"><div><b>No recent risk flags</b><span>Rule-based checks are clear.</span></div></div></td></tr>';
+    const supplierRows = suppliers.length ? suppliers.map(supplier => {
+      const last = supplier.syncRuns?.[0];
+      return `<tr><td><strong>${esc(supplier.name)}</strong><br><span class="subtle">${esc(supplier.code)} · ${esc(supplier.type)}</span></td><td>${supplier.active ? badge('ACTIVE') : badge('INACTIVE')}</td><td>${esc(supplier._count?.products || 0)}</td><td>${last ? `${badge(last.status)}<br><span class="subtle">${esc(dateTime(last.startedAt))}</span>` : 'Never'}</td></tr>`;
+    }).join('') : '<tr><td colspan="4">No suppliers connected.</td></tr>';
+    const promoRows = promos.length ? promos.slice(0, 10).map(promo => `<tr><td><strong>${esc(promo.code)}</strong></td><td>${promo.percentOff ? `${esc(promo.percentOff)}%` : esc(money(promo.amountOffCents || 0))}</td><td>${esc(promo.uses || 0)}${promo.maxUses ? ` / ${esc(promo.maxUses)}` : ''}</td><td>${promo.active ? badge('ACTIVE') : badge('INACTIVE')}</td></tr>`).join('') : '<tr><td colspan="4">No promo codes yet.</td></tr>';
+    const ruleRows = rules.length ? rules.map(rule => `<tr><td><strong>${esc(rule.name)}</strong></td><td>${esc(rule.supplier?.name || 'Any')}</td><td>${esc(rule.category?.name || 'Any')}</td><td>${rule.markupPercent != null ? `${esc(rule.markupPercent)}%` : '—'}</td><td>${esc(money(rule.minimumProfitCents || 0))}</td></tr>`).join('') : '<tr><td colspan="5">No pricing rules yet.</td></tr>';
+    const caseRows = cases.length ? cases.slice(0, 10).map(item => `<tr><td><strong>${esc(item.caseNumber)}</strong><br><span class="subtle">${esc(item.type.replaceAll('_',' '))}</span></td><td>${esc(item.order?.orderNumber || '—')}</td><td>${badge(item.status)}</td><td>${esc(item.user?.email || '—')}</td><td class="text-right"><button class="table-action" data-action="review-case" data-id="${esc(item.id)}">REVIEW →</button></td></tr>`).join('') : '<tr><td colspan="5">No buyer-protection cases.</td></tr>';
+
+    viewRoot.innerHTML = `
+      <section class="metric-grid">
+        ${metric('GMV', compactMoney(finance.gmvCents), `${finance.paidOrders} paid orders`, '↗')}
+        ${metric('Net before processor fees', compactMoney(finance.netRevenueBeforeProcessorFeesCents), `AOV ${compactMoney(finance.averageOrderValueCents)}`, '◎')}
+        ${metric('Supplier costs', compactMoney(finance.supplierCostCents), `Seller payouts ${compactMoney(finance.sellerPayoutsCents)}`, '⇄')}
+        ${metric('Refunds', compactMoney(finance.refundsCents), `${finance.refundCount} refunds · ${analytics.openCases} open cases`, '↩')}
+      </section>
+      <section class="ops-grid">
+        <article class="panel panel-pad">
+          <div class="panel-header"><h2>Growth signals</h2><span class="subtle">LIVE STORE DATA</span></div>
+          <div class="ops-stats"><span>Wishlists <b>${esc(analytics.wishlists)}</b></span><span>Reviews <b>${esc(analytics.reviews)}</b></span><span>Open cases <b>${esc(analytics.openCases)}</b></span><span>Risk flags <b>${esc(flags.length)}</b></span></div>
+        </article>
+        <article class="panel panel-pad">
+          <div class="panel-header"><h2>Automatic pricing</h2><button class="btn btn-primary" data-action="apply-pricing">Apply rules</button></div>
+          <p class="subtle">Re-price dropship products from landed supplier cost while respecting your active rules.</p>
+          <form id="pricing-rule-form" class="compact-form">
+            <input name="name" placeholder="Rule name" required />
+            <input name="markupPercent" type="number" min="0" max="1000" step="0.1" placeholder="Markup %" />
+            <input name="minimumProfit" type="number" min="0" step="0.01" placeholder="Min profit $" />
+            <button class="btn" type="submit">Add rule</button>
+          </form>
+        </article>
+      </section>
+      <section class="ops-grid">
+        <article class="data-panel"><div class="panel-header"><h2>Top products</h2></div><div class="table-wrap"><table><thead><tr><th>Product</th><th>Views</th><th>Bought</th><th>Wishlists</th></tr></thead><tbody>${topProducts}</tbody></table></div></article>
+        <article class="data-panel"><div class="panel-header"><h2>Top searches</h2></div><div class="table-wrap"><table><thead><tr><th>Search</th><th>Times</th><th>Results seen</th></tr></thead><tbody>${searches}</tbody></table></div></article>
+      </section>
+      <section class="data-panel"><div class="panel-header"><h2>Risk watch</h2><span class="subtle">LAST 7 DAYS</span></div><div class="table-wrap"><table><thead><tr><th>Order</th><th>Total</th><th>Flags</th><th></th></tr></thead><tbody>${fraudRows}</tbody></table></div></section>
+      <section class="data-panel"><div class="panel-header"><h2>Supplier sync</h2><span class="subtle">CATALOGUE + STOCK</span></div><div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Status</th><th>Linked products</th><th>Latest sync</th></tr></thead><tbody>${supplierRows}</tbody></table></div></section>
+      <section class="ops-grid">
+        <article class="data-panel"><div class="panel-header"><h2>Promo codes</h2></div><div class="ops-form-pad"><form id="promo-form" class="compact-form"><input name="code" placeholder="DREAM10" minlength="3" required /><input name="percentOff" type="number" min="1" max="100" placeholder="% off" required /><input name="maxUses" type="number" min="1" placeholder="Max uses" /><button class="btn" type="submit">Create</button></form></div><div class="table-wrap"><table><thead><tr><th>Code</th><th>Discount</th><th>Uses</th><th>Status</th></tr></thead><tbody>${promoRows}</tbody></table></div></article>
+        <article class="data-panel"><div class="panel-header"><h2>Pricing rules</h2></div><div class="table-wrap"><table><thead><tr><th>Rule</th><th>Supplier</th><th>Category</th><th>Markup</th><th>Min profit</th></tr></thead><tbody>${ruleRows}</tbody></table></div></article>
+      </section>
+      <section class="data-panel"><div class="panel-header"><h2>Buyer protection</h2><span class="subtle">RETURNS · DISPUTES · DAMAGE</span></div><div class="table-wrap"><table><thead><tr><th>Case</th><th>Order</th><th>Status</th><th>Buyer</th><th></th></tr></thead><tbody>${caseRows}</tbody></table></div></section>`;
+  }
+
+  async function openSupportCaseModal(id) {
+    const cases = await api('/api/support/admin/cases');
+    const item = cases.find(row => row.id === id);
+    if (!item) throw new Error('Support case not found.');
+    const canRefund = state.user?.role === 'ADMIN' && item.order && !['REFUNDED'].includes(item.order.paymentStatus);
+    openModal(`<div class="modal-header"><div><div class="eyebrow">BUYER PROTECTION</div><h2>${esc(item.caseNumber)}</h2></div><button class="icon-btn" data-modal-close>×</button></div>
+      <div class="modal-body"><div class="detail-grid"><div><span>Type</span><strong>${esc(item.type.replaceAll('_',' '))}</strong></div><div><span>Status</span><strong>${esc(item.status.replaceAll('_',' '))}</strong></div><div><span>Order</span><strong>${esc(item.order?.orderNumber || '—')}</strong></div><div><span>Buyer</span><strong>${esc(item.user?.email || '—')}</strong></div></div><div class="code-block">${esc([item.reason, item.details].filter(Boolean).join('\n\n') || 'No description provided.')}</div></div>
+      <div class="modal-footer"><select id="support-case-status" style="width:auto">${['OPEN','UNDER_REVIEW','AWAITING_SELLER','APPROVED','RESOLVED','REJECTED','CLOSED'].map(v => `<option value="${v}" ${item.status === v ? 'selected' : ''}>${v.replaceAll('_',' ')}</option>`).join('')}</select><button class="btn" data-action="save-case-status" data-id="${esc(item.id)}">Update case</button>${canRefund ? `<button class="btn btn-danger" data-action="refund-case" data-id="${esc(item.id)}" data-max="${esc(item.order.totalCents)}">Issue refund</button>` : ''}</div>`);
+  }
+
   async function renderSettings() {
     heading('Settings', 'Production security, payments, marketplace payouts and supplier integrations.');
     const [health, config] = await Promise.all([api('/api/health'), api('/api/admin/settings')]);
@@ -411,7 +485,7 @@
     let product = null;
     if (productId) product = await api(`/api/admin/products/${productId}`);
     const categoryOptions = categories.map(c => `<option value="${esc(c.id)}" ${product?.categoryId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
-    const supplierSummary = product?.supplierLinks?.length ? product.supplierLinks.map(link => `<div class="order-item"><div><strong>${esc(link.supplier.name)}</strong><small>${esc(link.supplierSku || link.supplierProductId)} · stock ${esc(link.stock ?? 'n/a')}</small></div><strong>${esc(money(link.costCents + link.shippingCents, link.currency))}</strong></div>`).join('') : '<div class="empty-state"><div><b>No supplier linked</b><span>Use Inventory to connect this part to a dropship supplier.</span></div></div>';
+    const supplierSummary = product?.supplierLinks?.length ? product.supplierLinks.map(link => `<div class="order-item"><div><strong>${esc(link.supplier.name)}</strong><small>${esc(link.supplierSku || link.supplierProductId)} · available ${esc(link.availableStock ?? 'n/a')}${link.reservedStock ? ` · ${esc(link.reservedStock)} reserved` : ''}</small></div><strong>${esc(money(link.costCents + link.shippingCents, link.currency))}</strong></div>`).join('') : '<div class="empty-state"><div><b>No supplier linked</b><span>Use Inventory to connect this part to a dropship supplier.</span></div></div>';
     const fitmentSummary = product?.fitments?.length ? product.fitments.slice(0, 12).map(f => `<span class="badge badge-submitted">${esc(f.vehicleVariant.model.make.name)} ${esc(f.vehicleVariant.model.name)} · ${esc(f.vehicleVariant.engineCode)}</span>`).join(' ') : '<span class="subtle">No fitments linked yet.</span>';
 
     openModal(`
@@ -430,6 +504,16 @@
           <label class="field"><span>Image URL</span><input name="imageUrl" type="url" value="${esc(product?.images?.[0]?.url || '')}" placeholder="https://…" ${product ? 'disabled' : ''} /></label>
           <label class="field span-2"><span>Short description</span><input name="shortDesc" maxlength="500" value="${esc(product?.shortDesc || '')}" placeholder="Short storefront summary" /></label>
           <label class="field span-2"><span>Description</span><textarea name="description" required minlength="10" placeholder="Specifications, materials and verified supplier information…">${esc(product?.description || '')}</textarea></label>
+          <div class="divider-title">Storefront details</div>
+          <label class="field"><span>Warranty</span><input name="warrantyText" maxlength="1000" value="${esc(product?.warrantyText || '')}" placeholder="12-month limited warranty" /></label>
+          <label class="field"><span>Return window (days)</span><input name="returnDays" type="number" min="0" max="365" value="${esc(product?.returnDays ?? '')}" placeholder="30" /></label>
+          <label class="field"><span>Install difficulty</span><input name="installDifficulty" maxlength="80" value="${esc(product?.installDifficulty || '')}" placeholder="Intermediate" /></label>
+          <label class="field"><span>Product video URL</span><input name="videoUrl" type="url" value="${esc(product?.videoUrl || '')}" placeholder="https://…" /></label>
+          <label class="field"><span>Shipping min days</span><input name="shippingMinDays" type="number" min="0" max="365" value="${esc(product?.shippingMinDays ?? '')}" /></label>
+          <label class="field"><span>Shipping max days</span><input name="shippingMaxDays" type="number" min="0" max="365" value="${esc(product?.shippingMaxDays ?? '')}" /></label>
+          <label class="field span-2"><span>Specifications (one key=value per line)</span><textarea name="specsText" placeholder="Material=Aluminum\nCore size=600x300x76 mm">${esc(Object.entries(product?.specs || {}).map(([k,v]) => `${k}=${v}`).join('\n'))}</textarea></label>
+          <label class="field"><span>SEO title</span><input name="seoTitle" maxlength="160" value="${esc(product?.seoTitle || '')}" placeholder="Product title | SANDMAN" /></label>
+          <label class="field"><span>SEO description</span><input name="seoDescription" maxlength="320" value="${esc(product?.seoDescription || '')}" placeholder="Search-friendly summary" /></label>
           <label class="field-check"><input name="requiresFitment" type="checkbox" ${product?.requiresFitment !== false ? 'checked' : ''} /><span>Requires vehicle fitment</span></label>
           <label class="field-check"><input name="isUniversal" type="checkbox" ${product?.isUniversal ? 'checked' : ''} /><span>Universal part</span></label>
           ${product ? `<div class="divider-title">Supplier sourcing</div><div class="span-2">${supplierSummary}</div><div class="divider-title">Current fitments</div><div class="span-2" style="display:flex;gap:6px;flex-wrap:wrap">${fitmentSummary}</div>` : ''}
@@ -441,6 +525,14 @@
   async function submitProductForm(form) {
     const fd = new FormData(form);
     const productId = form.dataset.id;
+    const specs = {};
+    for (const line of String(fd.get('specsText') || '').split('\n')) {
+      const at = line.indexOf('=');
+      if (at <= 0) continue;
+      const key = line.slice(0, at).trim();
+      const value = line.slice(at + 1).trim();
+      if (key && value) specs[key] = value;
+    }
     const payload = {
       name: String(fd.get('name') || ''),
       brand: optionalString(fd.get('brand')),
@@ -454,6 +546,15 @@
       requiresFitment: fd.get('requiresFitment') === 'on',
       isUniversal: fd.get('isUniversal') === 'on',
       status: String(fd.get('status') || 'DRAFT'),
+      warrantyText: optionalString(fd.get('warrantyText')),
+      returnDays: fd.get('returnDays') === '' ? undefined : Number(fd.get('returnDays')),
+      installDifficulty: optionalString(fd.get('installDifficulty')),
+      videoUrl: optionalString(fd.get('videoUrl')),
+      shippingMinDays: fd.get('shippingMinDays') === '' ? undefined : Number(fd.get('shippingMinDays')),
+      shippingMaxDays: fd.get('shippingMaxDays') === '' ? undefined : Number(fd.get('shippingMaxDays')),
+      specs: Object.keys(specs).length ? specs : undefined,
+      seoTitle: optionalString(fd.get('seoTitle')),
+      seoDescription: optionalString(fd.get('seoDescription')),
     };
     if (!productId) {
       payload.sku = String(fd.get('sku') || '');
@@ -651,6 +752,28 @@
         if (trackingNumber) await api(`/api/admin/suppliers/fulfillments/${actionEl.dataset.id}/manual`, { method:'PATCH', body:JSON.stringify({ status:'SHIPPED', trackingNumber, carrier }) });
         window.open('https://syncee.com', '_blank', 'noopener');
         if (trackingNumber) { toast('Syncee tracking saved'); await renderFulfillment(); }
+      } else if (action === 'apply-pricing') {
+        if (confirm('Apply active pricing rules to all dropship products?')) {
+          actionEl.disabled = true;
+          const result = await api('/api/admin/ops/pricing/apply', { method: 'POST' });
+          toast('Pricing updated', `${result.updated} products changed.`); await renderOperations();
+        }
+      } else if (action === 'review-case') {
+        await openSupportCaseModal(actionEl.dataset.id);
+      } else if (action === 'save-case-status') {
+        const status = $('#support-case-status')?.value;
+        await api(`/api/support/admin/cases/${actionEl.dataset.id}`, { method:'PATCH', body:JSON.stringify({ status }) });
+        closeModal(); toast('Case updated', status.replaceAll('_',' ')); await renderOperations();
+      } else if (action === 'refund-case') {
+        const maxCents = Number(actionEl.dataset.max || 0);
+        const raw = prompt(`Refund amount in USD (maximum ${(maxCents / 100).toFixed(2)})`, (maxCents / 100).toFixed(2));
+        if (raw !== null) {
+          const amountCents = Math.round(Number(raw) * 100);
+          if (!Number.isFinite(amountCents) || amountCents <= 0 || amountCents > maxCents) throw new Error('Enter a valid refund amount.');
+          if (!confirm(`Refund ${money(amountCents)}? This sends real money through the payment provider.`)) return;
+          await api(`/api/support/admin/cases/${actionEl.dataset.id}/refund`, { method:'POST', body:JSON.stringify({ amountCents }) });
+          closeModal(); toast('Refund submitted', money(amountCents)); await renderOperations();
+        }
       } else if (action === 'copy-command') {
         await navigator.clipboard.writeText(actionEl.dataset.copy || ''); toast('Copied', actionEl.dataset.copy || '');
       } else if (action === 'logout') logout();
@@ -666,8 +789,13 @@
         const errorNode = $('#login-error');
         errorNode.hidden = true; button.disabled = true; button.firstElementChild.textContent = 'Signing in…';
         try {
-          const result = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: $('#login-email').value, password: $('#login-password').value }) });
-          if (!['ADMIN', 'STAFF'].includes(result.user.role)) throw new Error('This account is not an admin or staff account.');
+          let result = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email: $('#login-email').value, password: $('#login-password').value }) });
+          if (result.requiresTwoFactor) {
+            const code = prompt('Enter your 6-digit authenticator code');
+            if (!code) throw new Error('Two-factor code is required.');
+            result = await api('/api/auth/login/2fa', { method: 'POST', body: JSON.stringify({ challengeToken: result.challengeToken, code: code.trim() }) });
+          }
+          if (!['ADMIN', 'STAFF'].includes(result.user?.role)) throw new Error('This account is not an admin or staff account.');
           setSession(result.token, result.user); enterApp(); toast('Welcome to SANDMAN', `Signed in as ${result.user.email}`);
         } catch (error) {
           errorNode.textContent = error.message; errorNode.hidden = false;
@@ -682,6 +810,18 @@
         if (newPassword !== confirmPassword) throw new Error('New passwords do not match.');
         const result = await api('/api/auth/change-password', { method:'POST', body:JSON.stringify({ currentPassword, newPassword }) });
         setSession(result.token, result.user); form.reset(); toast('Password changed', 'Other persistent sessions were signed out.');
+      } else if (form.id === 'promo-form') {
+        const fd = new FormData(form);
+        const percentOff = Number(fd.get('percentOff'));
+        const maxUsesRaw = String(fd.get('maxUses') || '').trim();
+        await api('/api/admin/ops/promos', { method:'POST', body:JSON.stringify({ code:String(fd.get('code') || '').trim(), percentOff, ...(maxUsesRaw ? { maxUses:Number(maxUsesRaw) } : {}) }) });
+        toast('Promo created'); await renderOperations();
+      } else if (form.id === 'pricing-rule-form') {
+        const fd = new FormData(form);
+        const markupRaw = String(fd.get('markupPercent') || '').trim();
+        const profitRaw = String(fd.get('minimumProfit') || '').trim();
+        await api('/api/admin/ops/pricing-rules', { method:'POST', body:JSON.stringify({ name:String(fd.get('name') || '').trim(), ...(markupRaw ? { markupPercent:Number(markupRaw) } : {}), ...(profitRaw ? { minimumProfitCents:Math.round(Number(profitRaw) * 100) } : {}) }) });
+        toast('Pricing rule created'); await renderOperations();
       } else if (form.id === 'product-form') await submitProductForm(form);
       else if (form.id === 'supplier-form') await submitSupplierForm(form);
       else if (form.id === 'supplier-product-form') await submitSupplierProductForm(form);

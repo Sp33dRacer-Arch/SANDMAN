@@ -1,0 +1,87 @@
+SANDMAN V1.4.2 STATIC AUDIT
+Date: 2026-08-29
+
+RESULT
+Static/source audit: PASS
+Ready for local dependency-backed verification: YES
+Ready to deploy to live Railway without local verification: NO
+
+WHAT V1.4.2 FIXED
+- Accepted-offer pricing is limited to exactly one unit at cart, checkout and defensive price-calculation layers.
+- Mixed-order fulfillment only counts shipped supplier fulfillments that still have active, non-fully-refunded dropship lines.
+- Supplier inventory is reserved atomically at checkout with reservedStock + availableStock.
+- Checkout rollback, cancellation and expiry release uncommitted supplier reservations.
+- Fully-refunded dropship lines release uncommitted supplier reservations.
+- Supplier feeds preserve live reservations when reported stock changes.
+- Releasing a supplier hold recalculates availability from the latest supplier-reported stock, preventing a feed change from recreating sold-out inventory.
+- Supplier submission commits the local hold only after the external supplier order has been persisted, with a retry/repair path for interrupted local commits.
+- Public product/search/recommendation availability uses availableStock rather than raw supplier stock.
+
+CHECKS COMPLETED
+- TypeScript source/seed/test files syntax parsed: 60
+- TypeScript parse errors: 0
+- Storefront JavaScript syntax: PASS
+- Admin JavaScript syntax: PASS
+- JSON parse: PASS
+- Storefront/Admin HTML parser check: PASS
+- Storefront/Admin CSS structural brace check: PASS
+- Relative source import resolution: PASS (0 missing)
+- Typed env.* source references vs env schema: PASS
+- Prisma schema structural scan: PASS (41 models, 15 enums, balanced blocks)
+- Prisma migration chain: PASS
+- Migration SQL presence/non-empty check: PASS
+- V1.4.2 migration destructive SQL scan: PASS (no DROP TABLE / TRUNCATE / DELETE FROM)
+- Package/API version parity: PASS (1.4.2)
+- Conventional API route duplicate scan: PASS (149 route declarations scanned, 0 exact method/path duplicates)
+- .env hygiene: PASS (.env absent; .env ignored)
+- Browser access-token persistence scan: PASS (no localStorage/sessionStorage references)
+- Obvious committed-secret pattern scan: PASS
+- Public storefront supplier-cost/raw supplier-id scan: PASS
+- Pure money/discount/offer/fulfillment logic compile: PASS
+- Randomized money/discount property smoke tests: 200,000 cases, 0 errors
+- Explicit offer quantity abuse case: PASS
+- Explicit refunded-supplier fulfillment case: PASS
+
+MIGRATIONS PRESENT
+- 20260828112756_init
+- 20260828120500_marketplace_storefront
+- 20260828203000_v13_payments_sessions_syncee
+- 20260828221000_v131_hardening
+- 20260829114500_v14_marketplace_experience
+- 20260829123000_v14_audit_fixes
+- 20260829134500_v141_checkout_refund_safety
+- 20260829151500_v142_supplier_inventory_reservations
+- migration_lock.toml
+
+CRITICAL V1.4.2 SOURCE MARKERS VERIFIED
+- Checkout accepted-offer quantity guard: PASS
+- Cart accepted-offer quantity guard: PASS
+- Defensive accepted-offer price calculation: PASS
+- Active-supplier mixed fulfillment filtering: PASS
+- Supplier reserved/available stock schema: PASS
+- Order-item supplier reservation audit fields: PASS
+- Atomic supplier reservation SQL: PASS
+- Supplier release recalculates from latest reported stock: PASS
+- Cancellation/expiry supplier release path: PASS
+- Supplier-feed reservation preservation: PASS
+- Public available-stock usage: PASS
+- Refund supplier-hold release: PASS
+- Refund fulfillment recomputation: PASS
+- V1.4.2 migration present: PASS
+
+WHAT COULD NOT BE VERIFIED IN THIS WORKSPACE
+The full npm dependency graph is not installed here. An npm install attempt did not complete within the workspace timeout, so these dependency-backed checks still MUST run on the user's PC before Railway:
+- npm install / package-lock.json generation
+- npx prisma generate
+- npx prisma validate using the installed Prisma CLI
+- npm run typecheck using the project's dependency types
+- npm test using Vitest
+- npm run build
+- prisma migrate deploy against a non-production PostgreSQL database
+- Stripe/PayPal/supplier sandbox end-to-end flows
+
+PACKAGE-LOCK
+package-lock.json is intentionally not fabricated. npm install on the user's PC should create it. Keep/commit it only after the local verify sequence passes.
+
+REQUIRED NEXT STEP BEFORE RAILWAY
+Extract V1.4.2 to a separate folder and run .\VERIFY-V1.4.2.ps1 on the user's PC. Do not replace the live deployment until that completes successfully and the new migrations have also been tested against a non-production PostgreSQL database.

@@ -7,8 +7,17 @@ import { routeParam } from '../../lib/route-param';
 
 export const productsRouter = Router();
 
+const queryBoolean = z.preprocess(value => {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toLowerCase();
+  if (['true', '1', 'yes', 'on'].includes(normalized)) return true;
+  if (['false', '0', 'no', 'off', ''].includes(normalized)) return false;
+  return value;
+}, z.boolean());
+
 const listSchema = z.object({
-  q: z.string().optional(),
+  q: z.string().trim().max(200).optional(),
   category: z.string().optional(),
   brand: z.string().optional(),
   source: z.enum(['DROPSHIP', 'MARKETPLACE']).optional(),
@@ -16,9 +25,10 @@ const listSchema = z.object({
   vehicleVariantId: z.string().optional(),
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
+  inStock: queryBoolean.optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().min(1).max(100).default(24),
-  sort: z.enum(['newest', 'price_asc', 'price_desc', 'name']).default('newest'),
+  sort: z.enum(['newest', 'price_asc', 'price_desc', 'name', 'popular']).default('newest'),
 });
 
 productsRouter.get('/', asyncHandler(async (req, res) => {
@@ -26,31 +36,47 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
   const orderBy = q.sort === 'price_asc' ? { priceCents: 'asc' as const }
     : q.sort === 'price_desc' ? { priceCents: 'desc' as const }
     : q.sort === 'name' ? { name: 'asc' as const }
+    : q.sort === 'popular' ? [{ purchaseCount: 'desc' as const }, { viewCount: 'desc' as const }]
     : { createdAt: 'desc' as const };
+
+  const and: any[] = [];
+  if (q.q) {
+    and.push({ OR: [
+      { name: { contains: q.q, mode: 'insensitive' } },
+      { sku: { contains: q.q, mode: 'insensitive' } },
+      { manufacturerPn: { contains: q.q, mode: 'insensitive' } },
+      { brand: { contains: q.q, mode: 'insensitive' } },
+      { description: { contains: q.q, mode: 'insensitive' } },
+      { category: { name: { contains: q.q, mode: 'insensitive' } } },
+      { seller: { sellerProfile: { storeName: { contains: q.q, mode: 'insensitive' } } } },
+      { fitments: { some: { vehicleVariant: { OR: [
+        { engineCode: { contains: q.q, mode: 'insensitive' } },
+        { engineName: { contains: q.q, mode: 'insensitive' } },
+        { chassisCode: { contains: q.q, mode: 'insensitive' } },
+        { model: { name: { contains: q.q, mode: 'insensitive' } } },
+        { model: { make: { name: { contains: q.q, mode: 'insensitive' } } } },
+      ] } } } },
+    ] });
+  }
+  if (q.vehicleVariantId) and.push({ OR: [{ isUniversal: true }, { fitments: { some: { vehicleVariantId: q.vehicleVariantId } } }] });
+  if (q.inStock) and.push({ OR: [
+    { sourceType: 'MARKETPLACE', stockQuantity: { gt: 0 } },
+    { sourceType: 'DROPSHIP', supplierLinks: { some: { active: true, OR: [{ availableStock: null }, { availableStock: { gt: 0 } }] } } },
+  ] });
 
   const where = {
     status: 'ACTIVE' as const,
     ...(q.source ? { sourceType: q.source } : {}),
     ...(q.condition ? { condition: q.condition } : {}),
-    ...(q.q ? { OR: [
-      { name: { contains: q.q, mode: 'insensitive' as const } },
-      { sku: { contains: q.q, mode: 'insensitive' as const } },
-      { manufacturerPn: { contains: q.q, mode: 'insensitive' as const } },
-      { brand: { contains: q.q, mode: 'insensitive' as const } },
-      { description: { contains: q.q, mode: 'insensitive' as const } },
-    ] } : {}),
     ...(q.category ? { category: { slug: q.category } } : {}),
     ...(q.brand ? { brand: { equals: q.brand, mode: 'insensitive' as const } } : {}),
-    ...(q.vehicleVariantId ? { OR: [
-      { isUniversal: true },
-      { fitments: { some: { vehicleVariantId: q.vehicleVariantId } } },
-    ] } : {}),
     ...((q.minPrice !== undefined || q.maxPrice !== undefined) ? {
       priceCents: {
         ...(q.minPrice !== undefined ? { gte: Math.round(q.minPrice * 100) } : {}),
         ...(q.maxPrice !== undefined ? { lte: Math.round(q.maxPrice * 100) } : {}),
       },
     } : {}),
+    ...(and.length ? { AND: and } : {}),
   };
 
   const [items, total] = await prisma.$transaction([
@@ -59,8 +85,9 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
       include: {
         category: true,
         images: { orderBy: { position: 'asc' }, take: 2 },
-        supplierLinks: { where: { active: true }, select: { stock: true } },
-        seller: { select: { id: true, firstName: true, lastName: true, createdAt: true } },
+        supplierLinks: { where: { active: true }, select: { availableStock: true } },
+        seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
+        reviews: { where: { status: 'PUBLISHED' }, select: { rating: true } },
       },
       orderBy,
       skip: (q.page - 1) * q.limit,
@@ -69,7 +96,17 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
     prisma.product.count({ where }),
   ]);
 
-  res.json({ items, total, page: q.page, pages: Math.ceil(total / q.limit) });
+  const mapped = items.map(item => {
+    const { supplierLinks, reviews, ...publicItem } = item;
+    return {
+      ...publicItem,
+      rating: reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : null,
+      reviewCount: reviews.length,
+      inStock: item.sourceType === 'MARKETPLACE' ? (item.stockQuantity ?? 0) > 0 : supplierLinks.some(link => link.availableStock === null || link.availableStock > 0),
+    };
+  });
+  if (q.q) await prisma.searchEvent.create({ data: { query: q.q, resultsCount: total } }).catch(() => undefined);
+  res.json({ items: mapped, total, page: q.page, pages: Math.max(1, Math.ceil(total / q.limit)) });
 }));
 
 productsRouter.get('/categories', asyncHandler(async (_req, res) => {
@@ -89,21 +126,34 @@ productsRouter.get('/:slug', asyncHandler(async (req, res) => {
       category: true,
       images: { orderBy: { position: 'asc' } },
       fitments: { include: { vehicleVariant: { include: { model: { include: { make: true } } } } } },
+      // Public product responses use supplier stock only to derive availability.
+      // Never expose supplier cost, raw feed data or supplier identifiers to buyers.
       supplierLinks: {
         where: { active: true },
-        include: { supplier: { select: { name: true, code: true } } },
-        orderBy: { costCents: 'asc' },
+        select: { availableStock: true },
       },
-      seller: { select: { id: true, firstName: true, lastName: true, createdAt: true } },
+      seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
+      reviews: {
+        where: { status: 'PUBLISHED' },
+        include: { user: { select: { id: true, firstName: true, lastName: true } } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      },
     },
   });
   if (!product) throw new HttpError(404, 'Product not found');
 
-  const fitsVehicle = !vehicleVariantId
-    ? null
-    : product.isUniversal || product.fitments.some(f => f.vehicleVariantId === vehicleVariantId);
+  const fitmentStatus = !vehicleVariantId ? 'UNCONFIRMED'
+    : product.isUniversal || !product.requiresFitment ? 'FITS'
+    : product.fitments.some(f => f.vehicleVariantId === vehicleVariantId) ? 'FITS'
+    : 'DOES_NOT_FIT';
+  const rating = product.reviews.length ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length : null;
+  const inStock = product.sourceType === 'MARKETPLACE'
+    ? (product.stockQuantity ?? 0) > 0
+    : product.supplierLinks.some(link => link.availableStock === null || link.availableStock > 0);
 
-  res.json({ ...product, fitsVehicle });
+  const { supplierLinks: _supplierLinks, ...publicProduct } = product;
+  res.json({ ...publicProduct, fitmentStatus, fitsVehicle: fitmentStatus === 'UNCONFIRMED' ? null : fitmentStatus === 'FITS', rating, reviewCount: product.reviews.length, inStock });
 }));
 
 productsRouter.get('/:id/fitment/:vehicleVariantId', asyncHandler(async (req, res) => {
@@ -112,10 +162,10 @@ productsRouter.get('/:id/fitment/:vehicleVariantId', asyncHandler(async (req, re
     select: { id: true, name: true, requiresFitment: true, isUniversal: true },
   });
   if (!product) throw new HttpError(404, 'Product not found');
-  if (product.isUniversal || !product.requiresFitment) return res.json({ compatible: true, reason: 'Universal fitment' });
+  if (product.isUniversal || !product.requiresFitment) return res.json({ compatible: true, status: 'FITS', reason: 'Universal fitment' });
 
   const match = await prisma.productFitment.findUnique({
     where: { productId_vehicleVariantId: { productId: routeParam(req.params.id, 'id'), vehicleVariantId: routeParam(req.params.vehicleVariantId, 'vehicleVariantId') } },
   });
-  res.json({ compatible: Boolean(match), notes: match?.notes ?? null });
+  res.json({ compatible: Boolean(match), status: match ? 'FITS' : 'DOES_NOT_FIT', notes: match?.notes ?? null });
 }));

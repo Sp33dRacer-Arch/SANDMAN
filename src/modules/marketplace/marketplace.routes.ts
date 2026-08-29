@@ -10,6 +10,8 @@ import { env } from '../../config/env';
 import { getStripe } from '../../services/stripe.service';
 import { markMarketplacePayoutReady, processReadyStripeMarketplacePayouts } from '../../services/marketplace-payout.service';
 import { recomputeOrderFulfillmentStatus } from '../../services/order-lifecycle.service';
+import { createNotification } from '../../services/notification.service';
+import { sendEmail } from '../../services/email.service';
 
 export const marketplaceRouter = Router();
 
@@ -33,6 +35,16 @@ const listingSchema = z.object({
   sellerShippingCents: z.number().int().min(0).max(500_000).default(0),
   sellerLocation: z.string().max(160).optional(),
   sellerNotes: z.string().max(1200).optional(),
+  warrantyText: z.string().max(1000).optional(),
+  returnDays: z.number().int().min(0).max(365).optional(),
+  installDifficulty: z.string().max(80).optional(),
+  specs: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
+  videoUrl: z.string().url().optional(),
+  shippingMinDays: z.number().int().min(0).max(365).optional(),
+  shippingMaxDays: z.number().int().min(0).max(365).optional(),
+  requiresFitment: z.boolean().default(false),
+  isUniversal: z.boolean().default(true),
+  fitmentVehicleVariantIds: z.array(z.string().min(1)).max(100).default([]),
   images: z.array(z.object({
     url: z.string().url(),
     alt: z.string().max(240).optional(),
@@ -68,7 +80,7 @@ marketplaceRouter.get('/', asyncHandler(async (req, res) => {
       include: {
         category: true,
         images: { orderBy: { position: 'asc' }, take: 2 },
-        seller: { select: { id: true, firstName: true, lastName: true, createdAt: true } },
+        seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
       },
       orderBy: { createdAt: 'desc' },
       skip: (query.page - 1) * query.limit,
@@ -168,7 +180,7 @@ marketplaceRouter.get('/sales', requireAuth, asyncHandler(async (req, res) => {
     where: {
       sellerId: req.auth!.userId,
       sourceType: 'MARKETPLACE',
-      order: { paymentStatus: 'PAID' },
+      order: { paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] } },
     },
     include: {
       order: { select: { id: true, orderNumber: true, status: true, shippingAddress: true, createdAt: true } },
@@ -196,7 +208,8 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
   const category = await prisma.category.findUnique({ where: { id: data.categoryId } });
   if (!category) throw new HttpError(400, 'Invalid category');
 
-  const { images, commissionAccepted: _commissionAccepted, ...listing } = data;
+  const { images, fitmentVehicleVariantIds, commissionAccepted: _commissionAccepted, ...listing } = data;
+  if (listing.requiresFitment && !listing.isUniversal && fitmentVehicleVariantIds.length === 0) throw new HttpError(400, 'Add at least one compatible vehicle or mark the part universal');
   const product = await prisma.product.create({
     data: {
       ...listing,
@@ -206,15 +219,14 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
       sellerId: req.auth!.userId,
       status: 'ACTIVE',
       currency: 'USD',
-      requiresFitment: false,
-      isUniversal: true,
       taxable: true,
       images: { create: images },
+      fitments: { create: fitmentVehicleVariantIds.map(vehicleVariantId => ({ vehicleVariantId })) },
     },
     include: {
       category: true,
       images: { orderBy: { position: 'asc' } },
-      seller: { select: { id: true, firstName: true, lastName: true, createdAt: true } },
+      seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
     },
   });
 
@@ -227,7 +239,7 @@ marketplaceRouter.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
   });
   if (!existing) throw new HttpError(404, 'Listing not found');
 
-  const data = listingSchema.omit({ images: true }).partial().parse(req.body);
+  const data = listingSchema.omit({ images: true, fitmentVehicleVariantIds: true }).partial().parse(req.body);
   const product = await prisma.product.update({ where: { id: existing.id }, data });
   res.json(product);
 }));
@@ -252,10 +264,18 @@ marketplaceRouter.post('/sales/:orderItemId/ship', requireAuth, asyncHandler(asy
       id: routeParam(req.params.orderItemId, 'orderItemId'),
       sellerId: req.auth!.userId,
       sourceType: 'MARKETPLACE',
-      order: { paymentStatus: 'PAID' },
+      order: { paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] } },
     },
+    include: { supportCases: { include: { refund: true } } },
   });
   if (!item) throw new HttpError(404, 'Sale item not found');
+  const refundedCents = item.supportCases.reduce((sum, supportCase) => {
+    return sum + (supportCase.refund?.status === 'SUCCEEDED' ? supportCase.refund.amountCents : 0);
+  }, 0);
+  const itemPaidCents = Math.max(0, item.totalPriceCents - item.discountCents + item.sellerShippingCents);
+  if (itemPaidCents > 0 && refundedCents >= itemPaidCents) {
+    throw new HttpError(409, 'This sale item has been fully refunded and must not be shipped');
+  }
 
   const updated = await prisma.orderItem.update({
     where: { id: item.id },
@@ -269,21 +289,15 @@ marketplaceRouter.post('/sales/:orderItemId/ship', requireAuth, asyncHandler(asy
     data: { orderId: item.orderId, type: 'MARKETPLACE_SELLER_SHIPPED', message: `${item.name} marked shipped by marketplace seller` },
   });
 
-  // A seller payout covers all of that seller's items in this order, so do not
-  // release it until every marketplace line for the seller has shipment evidence.
-  const unshippedSellerItems = await prisma.orderItem.count({
-    where: {
-      orderId: item.orderId,
-      sellerId: req.auth!.userId,
-      sourceType: 'MARKETPLACE',
-      sellerShippedAt: null,
-    },
-  });
-  if (unshippedSellerItems === 0) {
-    await markMarketplacePayoutReady(item.orderId, req.auth!.userId);
-    await processReadyStripeMarketplacePayouts(item.orderId, req.auth!.userId);
-  }
+  // Eligibility is recalculated after every shipment. The payout service itself
+  // verifies that every non-refunded marketplace line is shipped before money
+  // can move, so fully refunded lines cannot leave a seller payout stuck.
+  await markMarketplacePayoutReady(item.orderId, req.auth!.userId);
+  await processReadyStripeMarketplacePayouts(item.orderId, req.auth!.userId);
   await recomputeOrderFulfillmentStatus(item.orderId);
+  const buyerOrder = await prisma.order.findUnique({ where: { id: item.orderId }, select: { userId: true, email: true, orderNumber: true } });
+  if (buyerOrder?.userId) await createNotification({ userId: buyerOrder.userId, type: 'SHIPPING', title: 'Marketplace item shipped', body: `${item.name} has shipped.`, link: `#/order/${buyerOrder.orderNumber}` }).catch(() => undefined);
+  if (buyerOrder) await sendEmail({ to: buyerOrder.email, subject: `SANDMAN order ${buyerOrder.orderNumber}: item shipped`, text: `${item.name} has shipped via ${body.carrier}. Tracking: ${body.trackingNumber}`, type: 'SHIPPING' }).catch(() => undefined);
 
   res.json(updated);
 }));

@@ -8,12 +8,16 @@ import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 import { env } from '../../config/env';
 import { dollarsToCents, calculateOrderTotals } from '../../lib/money';
+import { allocateDiscountCents } from '../../lib/discount-allocation';
 import { createOrderNumber } from '../../lib/order-number';
 import { chooseSupplierForProduct } from '../../services/supplier-routing';
 import { getStripe } from '../../services/stripe.service';
 import { createPayPalOrder, capturePayPalOrder, paypalConfigured } from '../../services/paypal.service';
 import { finalizePaidOrder } from '../../services/payment-finalization.service';
 import { rollbackUninitializedCheckout } from '../../services/order-lifecycle.service';
+import { reservePromoUse } from '../../services/promo.service';
+import { reserveSupplierInventory } from '../../services/supplier-inventory.service';
+import { effectiveOfferUnitPrice } from '../../lib/offer-pricing';
 
 export const ordersRouter = Router();
 ordersRouter.use(requireAuth);
@@ -44,6 +48,7 @@ async function loadCheckoutCart(userId: string) {
               seller: { select: { id: true, stripeConnectAccountId: true, stripeConnectPayoutsEnabled: true } },
             },
           },
+          offer: true,
         },
       },
     },
@@ -52,6 +57,19 @@ async function loadCheckoutCart(userId: string) {
 
   for (const item of cart.items) {
     if (item.product.status !== 'ACTIVE') throw new HttpError(409, `${item.product.name} is no longer available`);
+    if (item.product.currency.toUpperCase() !== env.CURRENCY.toUpperCase()) {
+      throw new HttpError(409, `${item.product.name} uses a currency that this checkout does not support`);
+    }
+    if (item.offerId && (!item.offer
+      || item.offer.status !== 'ACCEPTED'
+      || item.offer.buyerId !== userId
+      || item.offer.productId !== item.productId
+      || (item.offer.expiresAt && item.offer.expiresAt <= new Date()))) {
+      throw new HttpError(409, `The accepted offer for ${item.product.name} is no longer valid`);
+    }
+    if (item.offerId && item.quantity !== 1) {
+      throw new HttpError(409, `The accepted offer for ${item.product.name} can only be purchased as quantity 1`);
+    }
     if (item.product.sourceType === 'DROPSHIP' && !item.product.supplierLinks.length) {
       throw new HttpError(409, `${item.product.name} is temporarily unavailable`);
     }
@@ -71,11 +89,40 @@ async function loadCheckoutCart(userId: string) {
   return cart;
 }
 
-function totalsForCart(cart: Awaited<ReturnType<typeof loadCheckoutCart>>) {
-  const subtotalCents = cart.items.reduce((sum, item) => sum + item.product.priceCents * item.quantity, 0);
+function unitPriceForItem(item: Awaited<ReturnType<typeof loadCheckoutCart>>['items'][number]) {
+  return effectiveOfferUnitPrice({
+    productPriceCents: item.product.priceCents,
+    quantity: item.quantity,
+    offer: item.offer,
+  });
+}
+
+async function promoDiscount(code: string | undefined, subtotalCents: number) {
+  if (!code) return { promo: null, discountCents: 0 };
+  const promo = await prisma.promoCode.findUnique({ where: { code: code.trim().toUpperCase() } });
+  const now = new Date();
+  if (!promo || !promo.active || (promo.startsAt && promo.startsAt > now) || (promo.endsAt && promo.endsAt < now) || (promo.maxUses !== null && promo.uses >= promo.maxUses)) {
+    throw new HttpError(400, 'Promo code is invalid or expired');
+  }
+  if (subtotalCents < promo.minimumCents) throw new HttpError(400, 'Cart does not meet the promo minimum');
+  const discountCents = Math.min(subtotalCents,
+    promo.percentOff != null ? Math.floor(subtotalCents * (promo.percentOff / 100)) : (promo.amountOffCents ?? 0));
+  return { promo, discountCents };
+}
+
+
+function discountAllocationsForCart(cart: Awaited<ReturnType<typeof loadCheckoutCart>>, discountCents: number) {
+  return allocateDiscountCents(
+    cart.items.map(item => ({ id: item.id, totalCents: unitPriceForItem(item) * item.quantity })),
+    discountCents,
+  );
+}
+
+function totalsForCart(cart: Awaited<ReturnType<typeof loadCheckoutCart>>, discountCents = 0) {
+  const subtotalCents = cart.items.reduce((sum, item) => sum + unitPriceForItem(item) * item.quantity, 0);
   const dropshipSubtotalCents = cart.items
     .filter(item => item.product.sourceType === 'DROPSHIP')
-    .reduce((sum, item) => sum + item.product.priceCents * item.quantity, 0);
+    .reduce((sum, item) => sum + unitPriceForItem(item) * item.quantity, 0);
   const sellerShippingCents = cart.items
     .filter(item => item.product.sourceType === 'MARKETPLACE')
     .reduce((sum, item) => sum + item.product.sellerShippingCents * item.quantity, 0);
@@ -85,15 +132,18 @@ function totalsForCart(cart: Awaited<ReturnType<typeof loadCheckoutCart>>) {
     freeShippingThresholdCents: dollarsToCents(env.FREE_SHIPPING_THRESHOLD),
     flatShippingCents: dropshipSubtotalCents > 0 ? dollarsToCents(env.FLAT_SHIPPING_RATE) : 0,
     taxRate: env.DEFAULT_TAX_RATE,
+    discountCents,
   });
   const shippingCents = base.shippingCents + sellerShippingCents;
   return { ...base, shippingCents, totalCents: base.totalCents + sellerShippingCents };
 }
 
 ordersRouter.post('/quote', asyncHandler(async (req, res) => {
-  addressSchema.parse(req.body.shippingAddress);
+  const body = z.object({ shippingAddress: addressSchema, promoCode: z.string().trim().max(50).optional() }).parse(req.body);
   const cart = await loadCheckoutCart(req.auth!.userId);
-  res.json({ currency: env.CURRENCY, ...totalsForCart(cart) });
+  const subtotalCents = cart.items.reduce((sum, item) => sum + unitPriceForItem(item) * item.quantity, 0);
+  const promo = await promoDiscount(body.promoCode, subtotalCents);
+  res.json({ currency: env.CURRENCY, promoCode: promo.promo?.code ?? null, ...totalsForCart(cart, promo.discountCents) });
 }));
 
 ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
@@ -102,6 +152,7 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
     billingAddress: addressSchema.optional(),
     customerNote: z.string().max(1000).optional(),
     paymentProvider: z.enum(['stripe', 'paypal', 'bank_transfer']).default('stripe'),
+    promoCode: z.string().trim().max(50).optional(),
   }).parse(req.body);
   const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
   if (!user) throw new HttpError(404, 'User not found');
@@ -111,7 +162,10 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
   if (body.paymentProvider === 'bank_transfer' && !env.BANK_TRANSFER_INSTRUCTIONS) throw new HttpError(503, 'Bank transfer is not configured');
 
   const cart = await loadCheckoutCart(user.id);
-  const totals = totalsForCart(cart);
+  const subtotalBeforePromo = cart.items.reduce((sum, item) => sum + unitPriceForItem(item) * item.quantity, 0);
+  const promo = await promoDiscount(body.promoCode, subtotalBeforePromo);
+  const totals = totalsForCart(cart, promo.discountCents);
+  const discountByCartItemId = discountAllocationsForCart(cart, promo.discountCents);
 
   const hasMarketplaceItems = cart.items.some(item => item.product.sourceType === 'MARKETPLACE');
   if (hasMarketplaceItems && body.paymentProvider !== 'stripe') {
@@ -126,6 +180,29 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
   })));
 
   const order = await prisma.$transaction(async tx => {
+    const promoReservedAt = promo.promo ? new Date() : undefined;
+    if (promo.promo) {
+      const reserved = await reservePromoUse(tx, { code: promo.promo.code, subtotalCents: subtotalBeforePromo });
+      if (!reserved) throw new HttpError(409, 'Promo code has just reached its usage limit or expired');
+    }
+
+    // Accepted offers are reserved atomically with marketplace stock so the same
+    // offer cannot be attached to two pending orders.
+    for (const { item } of assignments) {
+      if (!item.offerId) continue;
+      const reservedOffer = await tx.offer.updateMany({
+        where: {
+          id: item.offerId,
+          buyerId: user.id,
+          productId: item.productId,
+          status: 'ACCEPTED',
+          OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+        },
+        data: { status: 'RESERVED' },
+      });
+      if (reservedOffer.count !== 1) throw new HttpError(409, `The accepted offer for ${item.product.name} was already used or reserved`);
+    }
+
     // Reserve seller-owned stock atomically before the order is exposed to a payment provider.
     for (const { item } of assignments) {
       if (item.product.sourceType !== 'MARKETPLACE') continue;
@@ -141,45 +218,66 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
       if (reserved.count !== 1) throw new HttpError(409, `${item.product.name} was just purchased by another customer`);
     }
 
+    // Reserve finite/unknown supplier inventory atomically too. The supplier
+    // choice was made before the transaction, but this write is the final race
+    // check so two checkouts cannot both claim the last locally-known unit.
+    for (const { item, link } of assignments) {
+      if (item.product.sourceType !== 'DROPSHIP') continue;
+      if (!link) throw new HttpError(409, `${item.product.name} no longer has an available supplier`);
+      const reserved = await reserveSupplierInventory(tx, link.id, item.quantity);
+      if (!reserved) throw new HttpError(409, `${item.product.name} supplier stock changed. Please retry checkout.`);
+    }
+
+    const supplierReservationTime = new Date();
     return tx.order.create({
       data: {
         orderNumber: createOrderNumber(),
         userId: user.id,
         email: user.email,
         currency: env.CURRENCY,
+        promoCode: promo.promo?.code,
+        promoCountedAt: promoReservedAt,
         ...totals,
         shippingAddress: body.shippingAddress as Prisma.InputJsonValue,
         billingAddress: (body.billingAddress ?? body.shippingAddress) as Prisma.InputJsonValue,
         customerNote: body.customerNote,
         paymentProvider: body.paymentProvider,
         items: {
-          create: assignments.map(({ item, link }) => ({
+          create: assignments.map(({ item, link }) => {
+            const lineGrossCents = unitPriceForItem(item) * item.quantity;
+            const lineDiscountCents = discountByCartItemId.get(item.id) ?? 0;
+            const marketplaceNetCents = Math.max(0, lineGrossCents - lineDiscountCents);
+            const marketplaceFeeCents = item.product.sourceType === 'MARKETPLACE'
+              ? Math.floor(marketplaceNetCents * (env.MARKETPLACE_COMMISSION_PERCENT / 100))
+              : 0;
+            return {
             productId: item.productId,
             sku: item.product.sku,
             name: item.product.name,
             quantity: item.quantity,
-            unitPriceCents: item.product.priceCents,
-            totalPriceCents: item.product.priceCents * item.quantity,
+            unitPriceCents: unitPriceForItem(item),
+            totalPriceCents: lineGrossCents,
+            discountCents: lineDiscountCents,
+            offerId: item.offerId,
             sourceType: item.product.sourceType,
             sellerId: item.product.sellerId,
             sellerShippingCents: item.product.sourceType === 'MARKETPLACE' ? item.product.sellerShippingCents * item.quantity : 0,
-            platformFeeCents: item.product.sourceType === 'MARKETPLACE'
-              ? Math.floor((item.product.priceCents * item.quantity) * (env.MARKETPLACE_COMMISSION_PERCENT / 100))
-              : 0,
+            platformFeeCents: marketplaceFeeCents,
             sellerPayoutCents: item.product.sourceType === 'MARKETPLACE'
-              ? (item.product.priceCents * item.quantity)
-                - Math.floor((item.product.priceCents * item.quantity) * (env.MARKETPLACE_COMMISSION_PERCENT / 100))
-                + (item.product.sellerShippingCents * item.quantity)
+              ? marketplaceNetCents - marketplaceFeeCents + (item.product.sellerShippingCents * item.quantity)
               : undefined,
             supplierId: link?.supplierId,
             supplierProductId: link?.supplierProductId,
+            supplierLinkId: link?.id,
+            supplierStockReservedAt: link ? supplierReservationTime : undefined,
             supplierCostCents: link ? (link.costCents + link.shippingCents) * item.quantity : undefined,
             fitmentSnapshot: item.fitmentVehicleVariantId
               ? ({ vehicleVariantId: item.fitmentVehicleVariantId } as Prisma.InputJsonValue)
               : undefined,
-          })),
+            };
+          }),
         },
-        events: { create: { type: 'ORDER_CREATED', message: 'Checkout order created and marketplace stock reserved' } },
+        events: { create: { type: 'ORDER_CREATED', message: 'Checkout order created and inventory reservations secured' } },
       },
       include: { items: true },
     });
@@ -250,6 +348,9 @@ ordersRouter.post('/:orderNumber/paypal/capture', asyncHandler(async (req, res) 
   if (!order) throw new HttpError(404, 'Order not found');
   if (!order.paypalOrderId) throw new HttpError(409, 'This order does not have a PayPal payment');
   if (order.paymentStatus === 'PAID') return res.json({ success: true, alreadyPaid: true, order });
+  if (order.status === 'CANCELLED' || order.marketplaceStockReleasedAt) {
+    throw new HttpError(409, 'This checkout was cancelled. Create a new order instead of capturing the old PayPal session.');
+  }
 
   const capture = await capturePayPalOrder(order.paypalOrderId);
   if (capture.status !== 'COMPLETED') throw new HttpError(409, `PayPal payment is ${capture.status || 'not complete'}`);
