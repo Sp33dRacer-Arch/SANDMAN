@@ -430,12 +430,32 @@ adminRouter.post('/products/:id/fitments', asyncHandler(async (req, res) => {
   const data = z.object({
     vehicleVariantIds: z.array(z.string().min(1)).min(1).max(500),
     notes: z.string().max(500).optional(),
+    verified: z.boolean().default(false),
+    source: z.enum(['MANUAL', 'SUPPLIER', 'OEM', 'COMMUNITY', 'IMPORTED']).default('MANUAL'),
   }).parse(req.body);
   await prisma.productFitment.createMany({
-    data: data.vehicleVariantIds.map(vehicleVariantId => ({ productId: routeParam(req.params.id, 'id'), vehicleVariantId, notes: data.notes })),
+    data: data.vehicleVariantIds.map(vehicleVariantId => ({ productId: routeParam(req.params.id, 'id'), vehicleVariantId, notes: data.notes, verified: data.verified, source: data.source, verifiedAt: data.verified ? new Date() : null })),
     skipDuplicates: true,
   });
   res.status(201).json({ success: true, count: data.vehicleVariantIds.length });
+}));
+
+adminRouter.patch('/products/:id/fitments/:vehicleVariantId', asyncHandler(async (req, res) => {
+  const body = z.object({
+    verified: z.boolean().optional(),
+    source: z.enum(['MANUAL', 'SUPPLIER', 'OEM', 'COMMUNITY', 'IMPORTED']).optional(),
+    notes: z.string().max(500).nullable().optional(),
+  }).parse(req.body);
+  const productId = routeParam(req.params.id, 'id');
+  const vehicleVariantId = routeParam(req.params.vehicleVariantId, 'vehicleVariantId');
+  const updated = await prisma.productFitment.update({
+    where: { productId_vehicleVariantId: { productId, vehicleVariantId } },
+    data: {
+      ...body,
+      ...(body.verified === undefined ? {} : { verifiedAt: body.verified ? new Date() : null }),
+    },
+  });
+  res.json(updated);
 }));
 
 adminRouter.delete('/products/:id/fitments/:vehicleVariantId', asyncHandler(async (req, res) => {
@@ -485,6 +505,9 @@ adminRouter.post('/supplier-products', asyncHandler(async (req, res) => {
     shippingCents: z.number().int().nonnegative().default(0),
     currency: z.string().length(3).default('USD'),
     stock: z.number().int().nonnegative().nullable().optional(),
+    leadTimeDays: z.number().int().min(0).max(365).optional(),
+    warehouseCountry: z.string().trim().min(2).max(2).transform(v => v.toUpperCase()).optional(),
+    reliabilityScore: z.number().min(0).max(100).optional(),
   }).parse(req.body);
   res.status(201).json(await prisma.supplierProduct.create({
     data: { ...data, availableStock: data.stock ?? null },
@@ -497,6 +520,9 @@ adminRouter.patch('/supplier-products/:id', asyncHandler(async (req, res) => {
     shippingCents: z.number().int().nonnegative().optional(),
     stock: z.number().int().nonnegative().nullable().optional(),
     active: z.boolean().optional(),
+    leadTimeDays: z.number().int().min(0).max(365).nullable().optional(),
+    warehouseCountry: z.string().trim().min(2).max(2).transform(v => v.toUpperCase()).nullable().optional(),
+    reliabilityScore: z.number().min(0).max(100).nullable().optional(),
   }).parse(req.body);
   const id = routeParam(req.params.id, 'id');
   const { stock, ...metadata } = data;

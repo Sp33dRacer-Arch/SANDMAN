@@ -26,6 +26,7 @@ import { supportRouter } from './modules/support/support.routes';
 import { securityRouter } from './modules/security/security.routes';
 import { opsRouter } from './modules/ops/ops.routes';
 import { supplierFeedRouter } from './modules/supplier-feed/supplier-feed.routes';
+import { v2Router } from './modules/v2/v2.routes';
 
 export const app = express();
 
@@ -70,7 +71,7 @@ app.use('/assets', express.static(path.join(storeUiDir, 'assets')));
 app.get('/api', (_req, res) => res.json({
   name: 'SANDMAN',
   description: 'Automotive parts marketplace, builds, fitment, dropshipping and seller platform',
-  version: '1.4.2',
+  version: '2.0.0',
   health: '/api/health',
   admin: '/admin',
   storefront: '/',
@@ -97,6 +98,7 @@ app.use('/api/support', supportRouter);
 app.use('/api/security', securityRouter);
 app.use('/api/admin/ops', opsRouter);
 app.use('/api/supplier-feed', supplierFeedRouter);
+app.use('/api/v2', v2Router);
 
 app.use(notFound);
 app.use(errorHandler);

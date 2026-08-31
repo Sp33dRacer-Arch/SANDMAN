@@ -1,8 +1,8 @@
 {
   "name": "sandman-engine-parts-backend",
-  "version": "1.4.2",
+  "version": "2.0.0",
   "private": true,
-  "description": "SANDMAN automotive parts marketplace v1.4.2 with checkout reservation, refund/payout safety, builds, fitment, reviews, offers, messaging, buyer protection, alerts, finance ops and supplier controls.",
+  "description": "SANDMAN V2 automotive parts platform with verified fitment, vehicle catalogue, Garage, build advisor, sourcing requests, supplier routing, marketplace, checkout, reviews and operations.",
   "main": "dist/src/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -15,7 +15,9 @@
     "prisma:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
     "test": "vitest run",
-    "verify": "npm run prisma:generate && prisma validate && npm run typecheck && npm test && npm run build"
+    "verify": "npm run prisma:generate && prisma validate && npm run typecheck && npm test && npm run build",
+    "vehicle:check": "node scripts/vehicle-catalog-check.mjs",
+    "vehicle:sync:bmw": "node scripts/sync-vehicle-catalog.mjs --source=curated --only-make=BMW --from=1996 --to=2027"
   },
   "dependencies": {
     "@prisma/client": "6.19.0",
@@ -45,5 +47,11 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.0": true,
+    "prisma@6.19.0": true,
+    "@prisma/engines@6.19.0": true,
+    "esbuild@0.28.2": true
   }
 }

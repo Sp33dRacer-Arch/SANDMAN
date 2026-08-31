@@ -4,6 +4,7 @@ import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
+import { evaluateFitment } from '../../services/fitment.service';
 
 export const productsRouter = Router();
 
@@ -88,6 +89,7 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
         supplierLinks: { where: { active: true }, select: { availableStock: true } },
         seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
         reviews: { where: { status: 'PUBLISHED' }, select: { rating: true } },
+        fitments: { select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true } },
       },
       orderBy,
       skip: (q.page - 1) * q.limit,
@@ -97,12 +99,15 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
   ]);
 
   const mapped = items.map(item => {
-    const { supplierLinks, reviews, ...publicItem } = item;
+    const { supplierLinks, reviews, fitments, ...publicItem } = item;
+    const fitment = q.vehicleVariantId ? evaluateFitment({ ...item, fitments }, q.vehicleVariantId) : null;
     return {
       ...publicItem,
       rating: reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : null,
       reviewCount: reviews.length,
       inStock: item.sourceType === 'MARKETPLACE' ? (item.stockQuantity ?? 0) > 0 : supplierLinks.some(link => link.availableStock === null || link.availableStock > 0),
+      fitmentStatus: fitment?.status ?? null,
+      fitmentVerified: fitment?.verified ?? false,
     };
   });
   if (q.q) await prisma.searchEvent.create({ data: { query: q.q, resultsCount: total } }).catch(() => undefined);
@@ -143,29 +148,23 @@ productsRouter.get('/:slug', asyncHandler(async (req, res) => {
   });
   if (!product) throw new HttpError(404, 'Product not found');
 
-  const fitmentStatus = !vehicleVariantId ? 'UNCONFIRMED'
-    : product.isUniversal || !product.requiresFitment ? 'FITS'
-    : product.fitments.some(f => f.vehicleVariantId === vehicleVariantId) ? 'FITS'
-    : 'DOES_NOT_FIT';
+  const fitment = evaluateFitment(product, vehicleVariantId);
+  const fitmentStatus = fitment.status;
   const rating = product.reviews.length ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length : null;
   const inStock = product.sourceType === 'MARKETPLACE'
     ? (product.stockQuantity ?? 0) > 0
     : product.supplierLinks.some(link => link.availableStock === null || link.availableStock > 0);
 
   const { supplierLinks: _supplierLinks, ...publicProduct } = product;
-  res.json({ ...publicProduct, fitmentStatus, fitsVehicle: fitmentStatus === 'UNCONFIRMED' ? null : fitmentStatus === 'FITS', rating, reviewCount: product.reviews.length, inStock });
+  res.json({ ...publicProduct, fitmentStatus, fitmentVerified: fitment.verified, fitmentReason: fitment.reason, fitsVehicle: fitment.fits, rating, reviewCount: product.reviews.length, inStock });
 }));
 
 productsRouter.get('/:id/fitment/:vehicleVariantId', asyncHandler(async (req, res) => {
   const product = await prisma.product.findUnique({
     where: { id: routeParam(req.params.id, 'id') },
-    select: { id: true, name: true, requiresFitment: true, isUniversal: true },
+    select: { id: true, name: true, requiresFitment: true, isUniversal: true, fitments: { select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true } } },
   });
   if (!product) throw new HttpError(404, 'Product not found');
-  if (product.isUniversal || !product.requiresFitment) return res.json({ compatible: true, status: 'FITS', reason: 'Universal fitment' });
-
-  const match = await prisma.productFitment.findUnique({
-    where: { productId_vehicleVariantId: { productId: routeParam(req.params.id, 'id'), vehicleVariantId: routeParam(req.params.vehicleVariantId, 'vehicleVariantId') } },
-  });
-  res.json({ compatible: Boolean(match), status: match ? 'FITS' : 'DOES_NOT_FIT', notes: match?.notes ?? null });
+  const result = evaluateFitment(product, routeParam(req.params.vehicleVariantId, 'vehicleVariantId'));
+  res.json({ compatible: result.fits, status: result.status, verified: result.verified, reason: result.reason, evidence: result.evidence });
 }));

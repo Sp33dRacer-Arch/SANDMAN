@@ -178,6 +178,7 @@
       else if (view === 'inventory') await renderInventory();
       else if (view === 'suppliers') await renderSuppliers();
       else if (view === 'vehicles') await renderVehicles();
+      else if (view === 'sourcing') await renderSourcing();
       else if (view === 'fulfillment') await renderFulfillment();
       else if (view === 'operations') await renderOperations();
       else if (view === 'customers') await renderCustomers();
@@ -369,6 +370,53 @@
     viewRoot.innerHTML = `
       <div class="toolbar"><div class="toolbar-left"><input id="vehicle-search" type="search" value="${esc(filters.q || '')}" placeholder="Search BMW, B58, EA888, chassis…" /></div><div class="toolbar-right"><span class="date-chip">${variants.length} VARIANTS</span></div></div>
       <section class="fitment-card-grid">${cards}</section>`;
+  }
+
+  async function renderSourcing() {
+    heading('Sourcing desk', 'Missing vehicles, requested parts and catalogue health in one queue.');
+    const [requests, health] = await Promise.all([
+      api('/api/v2/admin/requests'),
+      api('/api/v2/admin/catalog-health'),
+    ]);
+    const openCount = Number(health.openVehicleRequests || 0) + Number(health.openPartRequests || 0);
+    const sourcingCount = $('#nav-sourcing-count');
+    if (sourcingCount) sourcingCount.textContent = openCount || '';
+
+    const vehicleRows = requests.vehicleRequests?.length ? requests.vehicleRequests.map(item => `
+      <tr>
+        <td><strong>${esc(item.make)} ${esc(item.model)}</strong><br><span class="subtle">${esc([item.year, item.trim, item.engineCode].filter(Boolean).join(' · ') || 'Details not supplied')}</span></td>
+        <td>${esc(item.user?.email || item.email || '—')}</td>
+        <td>${badge(item.status)}</td>
+        <td>${esc(shortDate(item.createdAt))}</td>
+        <td class="text-right"><select class="request-status-select" data-kind="vehicle" data-id="${esc(item.id)}">${['OPEN','REVIEWING','SOURCED','CLOSED'].map(v => `<option value="${v}" ${item.status === v ? 'selected' : ''}>${v.replaceAll('_',' ')}</option>`).join('')}</select></td>
+      </tr>`).join('') : '<tr><td colspan="5"><div class="empty-state"><div><b>No vehicle requests</b><span>Missing-car requests from shoppers appear here.</span></div></div></td></tr>';
+
+    const partRows = requests.partRequests?.length ? requests.partRequests.map(item => {
+      const vehicle = item.vehicleVariant ? `${item.vehicleVariant.model.make.name} ${item.vehicleVariant.model.name} · ${item.vehicleVariant.engineCode}` : 'Vehicle not linked';
+      return `<tr>
+        <td><strong>${esc(item.partName)}</strong><br><span class="subtle">${esc(item.oemNumber || 'No OEM number')} · ${esc(vehicle)}</span></td>
+        <td>${esc(item.user?.email || item.email || '—')}</td>
+        <td>${item.budgetCents == null ? '—' : `<strong>${esc(money(item.budgetCents))}</strong>`}</td>
+        <td>${badge(item.status)}</td>
+        <td class="text-right"><select class="request-status-select" data-kind="part" data-id="${esc(item.id)}">${['OPEN','REVIEWING','SOURCED','CLOSED'].map(v => `<option value="${v}" ${item.status === v ? 'selected' : ''}>${v.replaceAll('_',' ')}</option>`).join('')}</select></td>
+      </tr>`;
+    }).join('') : '<tr><td colspan="5"><div class="empty-state"><div><b>No part requests</b><span>Customer sourcing requests appear here.</span></div></div></td></tr>';
+
+    viewRoot.innerHTML = `
+      <section class="metric-grid">
+        ${metric('Unverified fitments', health.unverifiedFitments, 'Needs fitment review', '◇')}
+        ${metric('Fitment gaps', health.activeProductsWithoutFitment, 'Active vehicle-specific parts', '⌁')}
+        ${metric('Missing images', health.productsWithoutImages, 'Active product pages', '▧')}
+        ${metric('Open sourcing', openCount, `${health.openVehicleRequests} vehicles · ${health.openPartRequests} parts`, '⌕')}
+      </section>
+      <section class="data-panel">
+        <div class="panel-header"><h2>Vehicle requests</h2><span class="subtle">CUSTOMER CATALOGUE GAPS</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Vehicle</th><th>Customer</th><th>Status</th><th>Requested</th><th class="text-right">Workflow</th></tr></thead><tbody>${vehicleRows}</tbody></table></div>
+      </section>
+      <section class="data-panel sourcing-gap">
+        <div class="panel-header"><h2>Part sourcing requests</h2><span class="subtle">PARTS NOT YET IN CATALOGUE</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Part</th><th>Customer</th><th>Budget</th><th>Status</th><th class="text-right">Workflow</th></tr></thead><tbody>${partRows}</tbody></table></div>
+      </section>`;
   }
 
   async function renderFulfillment() {
@@ -597,7 +645,7 @@
 
   async function openSupplierProductModal() {
     const [productsData, suppliers] = await Promise.all([api('/api/admin/products?limit=100'), api('/api/admin/suppliers')]);
-    openModal(`<form id="supplier-product-form"><div class="modal-header"><div><h2>Link supplier SKU</h2><p>Map a source product to your SANDMAN catalogue</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="form-grid"><label class="field span-2"><span>SANDMAN product</span><select name="productId" required><option value="">Choose product</option>${productsData.items.map(p => `<option value="${esc(p.id)}">${esc(p.sku)} — ${esc(p.name)}</option>`).join('')}</select></label><label class="field span-2"><span>Supplier</span><select name="supplierId" required><option value="">Choose supplier</option>${suppliers.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label><label class="field"><span>Supplier product ID</span><input name="supplierProductId" required /></label><label class="field"><span>Supplier SKU</span><input name="supplierSku" /></label><label class="field"><span>Part cost (USD)</span><input name="cost" type="number" step="0.01" min="0" required /></label><label class="field"><span>Shipping cost (USD)</span><input name="shipping" type="number" step="0.01" min="0" value="0" /></label><label class="field"><span>Stock</span><input name="stock" type="number" min="0" /></label></div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Link supplier SKU</button></div></form>`);
+    openModal(`<form id="supplier-product-form"><div class="modal-header"><div><h2>Link supplier SKU</h2><p>Map a source product to your SANDMAN catalogue</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="form-grid"><label class="field span-2"><span>SANDMAN product</span><select name="productId" required><option value="">Choose product</option>${productsData.items.map(p => `<option value="${esc(p.id)}">${esc(p.sku)} — ${esc(p.name)}</option>`).join('')}</select></label><label class="field span-2"><span>Supplier</span><select name="supplierId" required><option value="">Choose supplier</option>${suppliers.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('')}</select></label><label class="field"><span>Supplier product ID</span><input name="supplierProductId" required /></label><label class="field"><span>Supplier SKU</span><input name="supplierSku" /></label><label class="field"><span>Part cost (USD)</span><input name="cost" type="number" step="0.01" min="0" required /></label><label class="field"><span>Shipping cost (USD)</span><input name="shipping" type="number" step="0.01" min="0" value="0" /></label><label class="field"><span>Stock</span><input name="stock" type="number" min="0" /></label><label class="field"><span>Lead time (days)</span><input name="leadTimeDays" type="number" min="0" max="365" placeholder="3" /></label><label class="field"><span>Warehouse country</span><input name="warehouseCountry" maxlength="2" placeholder="US" /></label><label class="field"><span>Reliability score</span><input name="reliabilityScore" type="number" min="0" max="100" step="0.1" placeholder="95" /></label></div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Link supplier SKU</button></div></form>`);
   }
 
   async function openVehicleModal() {
@@ -608,19 +656,28 @@
   async function openFitmentModal(productId) {
     const [product, variants] = await Promise.all([api(`/api/admin/products/${productId}`), api('/api/admin/vehicles?limit=300')]);
     const selected = new Set(product.fitments.map(f => f.vehicleVariantId));
-    const options = variants.map(v => `<label class="fitment-option"><input type="checkbox" name="variant" value="${esc(v.id)}" ${selected.has(v.id) ? 'checked' : ''} /><span><strong>${esc(v.model.make.name)} ${esc(v.model.name)} ${v.trim ? `· ${esc(v.trim)}` : ''}</strong><small>${esc(v.yearStart)}–${esc(v.yearEnd)} · ${esc(v.chassisCode || 'chassis n/a')} · ${esc(v.engineName)}</small></span><code>${esc(v.engineCode)}</code></label>`).join('');
-    openModal(`<form id="fitment-form" data-product-id="${esc(productId)}" data-existing="${esc(JSON.stringify([...selected]))}"><div class="modal-header"><div><h2>Manage fitment</h2><p>${esc(product.name)} · ${esc(product.sku)}</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="toolbar" style="margin-bottom:12px"><div class="toolbar-left" style="width:100%"><input id="fitment-filter" type="search" placeholder="Filter make, model or engine code…" style="width:100%" /></div></div><div id="fitment-picker" class="fitment-picker">${options || '<div class="empty-state"><div><b>No vehicle variants</b><span>Add vehicles first.</span></div></div>'}</div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Save compatibility</button></div></form>`, 'modal-lg');
+    const verified = new Set(product.fitments.filter(f => f.verified).map(f => f.vehicleVariantId));
+    const options = variants.map(v => `<div class="fitment-option"><input type="checkbox" name="variant" value="${esc(v.id)}" ${selected.has(v.id) ? 'checked' : ''} /><span><strong>${esc(v.model.make.name)} ${esc(v.model.name)} ${v.trim ? `· ${esc(v.trim)}` : ''}</strong><small>${esc(v.yearStart)}–${esc(v.yearEnd)} · ${esc(v.chassisCode || 'chassis n/a')} · ${esc(v.engineName)}</small></span><label class="verify-toggle" title="Verified compatibility"><input type="checkbox" name="verifiedVariant" value="${esc(v.id)}" ${verified.has(v.id) ? 'checked' : ''} /><span>${verified.has(v.id) ? 'VERIFIED' : 'VERIFY'}</span></label><code>${esc(v.engineCode)}</code></div>`).join('');
+    openModal(`<form id="fitment-form" data-product-id="${esc(productId)}" data-existing="${esc(JSON.stringify([...selected]))}" data-existing-verified="${esc(JSON.stringify([...verified]))}"><div class="modal-header"><div><h2>Manage fitment</h2><p>${esc(product.name)} · ${esc(product.sku)}</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="toolbar" style="margin-bottom:12px"><div class="toolbar-left" style="width:100%"><input id="fitment-filter" type="search" placeholder="Filter make, model or engine code…" style="width:100%" /></div><div class="toolbar-right"><select name="fitmentSource" title="Evidence source"><option>MANUAL</option><option>OEM</option><option>SUPPLIER</option><option>IMPORTED</option><option>COMMUNITY</option></select></div></div><div class="fitment-evidence-note">Tick VERIFY only when you have evidence for that exact vehicle variant. Catalogue links remain usable but display as unverified until reviewed.</div><div id="fitment-picker" class="fitment-picker">${options || '<div class="empty-state"><div><b>No vehicle variants</b><span>Add vehicles first.</span></div></div>'}</div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Save compatibility</button></div></form>`, 'modal-lg');
   }
 
   async function submitFitmentForm(form) {
     const productId = form.dataset.productId;
+    const fd = new FormData(form);
     const existing = new Set(safeJson(form.dataset.existing) || []);
-    const selected = new Set(new FormData(form).getAll('variant').map(String));
-    const toAdd = [...selected].filter(id => !existing.has(id));
+    const existingVerified = new Set(safeJson(form.dataset.existingVerified) || []);
+    const selected = new Set(fd.getAll('variant').map(String));
+    const verified = new Set(fd.getAll('verifiedVariant').map(String).filter(id => selected.has(id)));
+    const source = String(fd.get('fitmentSource') || 'MANUAL');
+    const toAddVerified = [...selected].filter(id => !existing.has(id) && verified.has(id));
+    const toAddCatalog = [...selected].filter(id => !existing.has(id) && !verified.has(id));
     const toRemove = [...existing].filter(id => !selected.has(id));
-    if (toAdd.length) await api(`/api/admin/products/${productId}/fitments`, { method: 'POST', body: JSON.stringify({ vehicleVariantIds: toAdd }) });
+    if (toAddVerified.length) await api(`/api/admin/products/${productId}/fitments`, { method: 'POST', body: JSON.stringify({ vehicleVariantIds: toAddVerified, verified: true, source }) });
+    if (toAddCatalog.length) await api(`/api/admin/products/${productId}/fitments`, { method: 'POST', body: JSON.stringify({ vehicleVariantIds: toAddCatalog, verified: false, source }) });
+    const verificationChanges = [...selected].filter(id => existing.has(id) && existingVerified.has(id) !== verified.has(id));
+    await Promise.all(verificationChanges.map(id => api(`/api/admin/products/${productId}/fitments/${id}`, { method:'PATCH', body:JSON.stringify({ verified: verified.has(id), source }) })));
     await Promise.all(toRemove.map(id => api(`/api/admin/products/${productId}/fitments/${id}`, { method: 'DELETE' })));
-    closeModal(); toast('Fitment updated', `${selected.size} compatible vehicle variants linked.`); await renderProducts();
+    closeModal(); toast('Fitment updated', `${selected.size} compatible · ${verified.size} verified.`); await renderProducts();
   }
 
   async function openVehicleModelModal() {
@@ -676,6 +733,9 @@
       shippingCents: Math.round(Number(fd.get('shipping') || 0) * 100),
       currency: 'USD',
       stock: fd.get('stock') === '' ? undefined : Number(fd.get('stock')),
+      leadTimeDays: fd.get('leadTimeDays') === '' ? undefined : Number(fd.get('leadTimeDays')),
+      warehouseCountry: optionalString(fd.get('warehouseCountry'))?.toUpperCase(),
+      reliabilityScore: fd.get('reliabilityScore') === '' ? undefined : Number(fd.get('reliabilityScore')),
     };
     await api('/api/admin/supplier-products', { method: 'POST', body: JSON.stringify(payload) });
     closeModal(); toast('Supplier SKU linked', 'Inventory routing is now available for this product.'); await renderInventory();
@@ -839,8 +899,17 @@
     else if (event.target.id === 'fitment-filter') { const q = event.target.value.toLowerCase(); $$('.fitment-option', $('#fitment-picker')).forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(q); }); }
   });
 
-  document.addEventListener('change', event => {
-    if (event.target.id === 'product-status') renderProducts({ q: $('#product-search')?.value || '', status: event.target.value });
+  document.addEventListener('change', async event => {
+    if (event.target.classList.contains('request-status-select')) {
+      try {
+        const kind = event.target.dataset.kind;
+        const id = event.target.dataset.id;
+        const status = event.target.value;
+        await api(`/api/v2/admin/requests/${kind}/${id}`, { method:'PATCH', body:JSON.stringify({ status }) });
+        toast('Sourcing request updated', status.replaceAll('_',' '));
+        await renderSourcing();
+      } catch (error) { toast('Could not update request', error.message, 'error'); }
+    } else if (event.target.id === 'product-status') renderProducts({ q: $('#product-search')?.value || '', status: event.target.value });
     else if (event.target.id === 'order-status') renderOrders({ q: $('#order-search')?.value || '', status: event.target.value });
   });
 

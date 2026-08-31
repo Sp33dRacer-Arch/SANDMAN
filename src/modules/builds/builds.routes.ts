@@ -5,6 +5,7 @@ import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { optionalAuth, requireAuth } from '../../middleware/auth';
+import { evaluateFitment } from '../../services/fitment.service';
 
 export const buildsRouter = Router();
 
@@ -18,7 +19,7 @@ function buildWithItems() {
           include: {
             category: true,
             images: { orderBy: { position: 'asc' as const }, take: 1 },
-            fitments: { select: { vehicleVariantId: true } },
+            fitments: { select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true } },
           },
         },
       },
@@ -31,15 +32,13 @@ function summarize(build: any) {
   const variantId = build.garageVehicle?.vehicleVariantId ?? build.vehicleVariantId ?? null;
   const items = build.items.map((item: any) => {
     const p = item.product;
-    const fit = !variantId ? 'UNCONFIRMED'
-      : p.isUniversal || !p.requiresFitment ? 'FITS'
-      : p.fitments.some((f: any) => f.vehicleVariantId === variantId) ? 'FITS'
-      : 'DOES_NOT_FIT';
-    return { ...item, fitmentStatus: fit, lineTotalCents: p.priceCents * item.quantity };
+    const fitment = evaluateFitment(p, variantId);
+    return { ...item, fitmentStatus: fitment.status, fitmentVerified: fitment.verified, fitmentReason: fitment.reason, lineTotalCents: p.priceCents * item.quantity };
   });
   const totalCents = items.reduce((sum: number, item: any) => sum + item.lineTotalCents, 0);
   const incompatible = items.filter((item: any) => item.fitmentStatus === 'DOES_NOT_FIT').length;
-  return { ...build, items, totalCents, budgetRemainingCents: build.budgetCents == null ? null : build.budgetCents - totalCents, incompatible };
+  const unconfirmed = items.filter((item: any) => item.fitmentStatus === 'UNKNOWN').length;
+  return { ...build, items, totalCents, budgetRemainingCents: build.budgetCents == null ? null : build.budgetCents - totalCents, incompatible, unconfirmed };
 }
 
 buildsRouter.get('/public/:id', optionalAuth, asyncHandler(async (req, res) => {
@@ -65,7 +64,9 @@ buildsRouter.post('/', asyncHandler(async (req, res) => {
     garageVehicleId: z.string().optional(),
     vehicleVariantId: z.string().optional(),
     targetPowerHp: z.number().int().min(50).max(5000).optional(),
+    targetTorqueNm: z.number().int().min(50).max(10_000).optional(),
     budgetCents: z.number().int().positive().max(100_000_000).optional(),
+    goal: z.string().trim().max(120).optional(),
     notes: z.string().max(2000).optional(),
     isPublic: z.boolean().default(false),
   }).refine(v => !(v.garageVehicleId && v.vehicleVariantId), { message: 'Choose a garage vehicle or a vehicle variant, not both' }).parse(req.body);
@@ -93,7 +94,9 @@ buildsRouter.patch('/:id', asyncHandler(async (req, res) => {
   const body = z.object({
     name: z.string().trim().min(2).max(120).optional(),
     targetPowerHp: z.number().int().min(50).max(5000).nullable().optional(),
+    targetTorqueNm: z.number().int().min(50).max(10_000).nullable().optional(),
     budgetCents: z.number().int().positive().max(100_000_000).nullable().optional(),
+    goal: z.string().trim().max(120).nullable().optional(),
     notes: z.string().max(2000).nullable().optional(),
     isPublic: z.boolean().optional(),
   }).parse(req.body);

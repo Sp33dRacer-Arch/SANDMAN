@@ -267,3 +267,9 @@ td strong { color: var(--text); font-size: 10px; font-weight: 700; }
 
 /* V1.4 operations cockpit */
 .ops-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-bottom:16px}.ops-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:18px}.ops-stats span{border:1px solid var(--line);padding:14px;display:flex;flex-direction:column;gap:6px;color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.08em}.ops-stats b{font-size:22px;color:var(--text);letter-spacing:-.03em}.compact-form{display:grid;grid-template-columns:2fr 1fr 1fr auto;gap:8px;align-items:end;margin-top:14px}.compact-form input{min-width:0}.ops-form-pad{padding:0 16px 16px}.ops-form-pad .compact-form{grid-template-columns:1.4fr .8fr .8fr auto;margin-top:0}@media(max-width:1050px){.ops-grid{grid-template-columns:1fr}.ops-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.compact-form,.ops-form-pad .compact-form{grid-template-columns:1fr 1fr}}@media(max-width:650px){.ops-stats,.compact-form,.ops-form-pad .compact-form{grid-template-columns:1fr}}
+
+
+/* V2 sourcing desk */
+.sourcing-gap{margin-top:16px}.request-status-select{min-width:128px;width:auto;padding:7px 9px;font-size:9px}.metric-grid+.data-panel{margin-top:16px}
+
+.fitment-option{grid-template-columns:20px 1fr auto auto}.verify-toggle{display:flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:7px;padding:5px 7px}.verify-toggle input{width:auto}.verify-toggle span{font-size:7px;color:var(--sand);font-weight:900;letter-spacing:.07em}.fitment-evidence-note{font-size:8px;color:var(--muted);line-height:1.55;border:1px solid var(--line);padding:9px 10px;border-radius:8px;margin-bottom:10px}

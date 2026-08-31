@@ -35,6 +35,9 @@ supplierFeedRouter.post('/:code', asyncHandler(async (req, res) => {
     shippingCents: z.number().int().nonnegative().default(0),
     stock: z.number().int().nonnegative().nullable().optional(),
     currency: z.string().length(3).default('USD'),
+    leadTimeDays: z.number().int().min(0).max(365).optional(),
+    warehouseCountry: z.string().trim().min(2).max(2).transform(v => v.toUpperCase()).optional(),
+    reliabilityScore: z.number().min(0).max(100).optional(),
   })).min(1).max(5000) }).parse(req.body);
 
   const run = await prisma.supplierSyncRun.create({ data: { supplierId: supplier.id, status: 'RUNNING', productsSeen: body.items.length } });
@@ -50,8 +53,8 @@ supplierFeedRouter.post('/:code', asyncHandler(async (req, res) => {
       const newAvailableStock = await prisma.$transaction(async tx => {
         const link = await tx.supplierProduct.upsert({
           where: { supplierId_supplierProductId: { supplierId: supplier.id, supplierProductId: row.supplierProductId } },
-          update: { supplierSku: row.supplierSku, costCents: row.costCents, shippingCents: row.shippingCents, currency: row.currency.toUpperCase(), active: true },
-          create: { supplierId: supplier.id, productId: product.id, supplierProductId: row.supplierProductId, supplierSku: row.supplierSku, costCents: row.costCents, shippingCents: row.shippingCents, stock: row.stock ?? null, availableStock: row.stock ?? null, currency: row.currency.toUpperCase(), active: true, lastSyncedAt: new Date() },
+          update: { supplierSku: row.supplierSku, costCents: row.costCents, shippingCents: row.shippingCents, currency: row.currency.toUpperCase(), active: true, leadTimeDays: row.leadTimeDays, warehouseCountry: row.warehouseCountry, reliabilityScore: row.reliabilityScore, lastSyncedAt: new Date() },
+          create: { supplierId: supplier.id, productId: product.id, supplierProductId: row.supplierProductId, supplierSku: row.supplierSku, costCents: row.costCents, shippingCents: row.shippingCents, stock: row.stock ?? null, availableStock: row.stock ?? null, currency: row.currency.toUpperCase(), active: true, leadTimeDays: row.leadTimeDays, warehouseCountry: row.warehouseCountry, reliabilityScore: row.reliabilityScore, lastSyncedAt: new Date() },
         });
         return setSupplierReportedStock(tx, link.id, row.stock ?? null);
       });

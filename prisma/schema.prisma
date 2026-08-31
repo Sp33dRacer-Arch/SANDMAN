@@ -126,6 +126,21 @@ enum AlertType {
   RESTOCK
 }
 
+enum RequestStatus {
+  OPEN
+  REVIEWING
+  SOURCED
+  CLOSED
+}
+
+enum FitmentSource {
+  MANUAL
+  SUPPLIER
+  OEM
+  COMMUNITY
+  IMPORTED
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -170,6 +185,8 @@ model User {
   recentlyViewed     RecentlyViewed[]
   passwordResetTokens PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  vehicleRequests VehicleRequest[]
+  partRequests    PartRequest[]
 }
 
 model AuthSession {
@@ -246,6 +263,7 @@ model VehicleVariant {
   productFitments  ProductFitment[]
   garageVehicles   GarageVehicle[]
   builds            Build[]
+  partRequests      PartRequest[]
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -268,6 +286,46 @@ model GarageVehicle {
   builds           Build[]
 
   @@index([userId])
+}
+
+
+model VehicleRequest {
+  id         String        @id @default(cuid())
+  userId     String?
+  email      String?
+  make       String
+  model      String
+  year       Int?
+  trim       String?
+  engineCode String?
+  notes      String?
+  status     RequestStatus @default(OPEN)
+  user       User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+}
+
+model PartRequest {
+  id               String          @id @default(cuid())
+  userId           String?
+  email            String?
+  vehicleVariantId String?
+  partName         String
+  oemNumber        String?
+  notes            String?
+  budgetCents      Int?
+  status           RequestStatus   @default(OPEN)
+  user             User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  vehicleVariant   VehicleVariant? @relation(fields: [vehicleVariantId], references: [id], onDelete: SetNull)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([vehicleVariantId])
 }
 
 model Category {
@@ -365,11 +423,15 @@ model ProductFitment {
   productId        String
   vehicleVariantId String
   notes            String?
+  verified         Boolean        @default(false)
+  source           FitmentSource  @default(MANUAL)
+  verifiedAt       DateTime?
   product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
   vehicleVariant   VehicleVariant @relation(fields: [vehicleVariantId], references: [id], onDelete: Cascade)
 
   @@unique([productId, vehicleVariantId])
   @@index([vehicleVariantId])
+  @@index([verified, source])
 }
 
 model Supplier {
@@ -402,6 +464,9 @@ model SupplierProduct {
   reservedStock     Int      @default(0)
   availableStock    Int?
   active            Boolean  @default(true)
+  leadTimeDays      Int?
+  warehouseCountry String?
+  reliabilityScore Float?
   lastSyncedAt      DateTime?
   rawData           Json?
   supplier          Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
@@ -678,7 +743,9 @@ model Build {
   vehicleVariantId String?
   name            String
   targetPowerHp   Int?
+  targetTorqueNm  Int?
   budgetCents     Int?
+  goal            String?
   notes           String?
   isPublic        Boolean         @default(false)
   createdAt       DateTime        @default(now())

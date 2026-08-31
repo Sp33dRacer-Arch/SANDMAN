@@ -1,63 +1,119 @@
-# SANDMAN V1.4.2
+# SANDMAN V2.0
 
-SANDMAN is a custom automotive-parts ecommerce + marketplace backend and storefront.
+SANDMAN is a custom automotive-parts commerce platform: storefront, marketplace, My Garage, exact vehicle fitment, builds, supplier routing, checkout, payments, reviews, support and admin operations.
 
-V1.4.2 keeps the V1.4.1 payment, refund, payout, session and marketplace hardening and fixes the three final issues found in the second audit: accepted-offer quantity enforcement, mixed-order refund/fulfillment status accounting, and atomic dropship supplier inventory reservations.
+V2.0 moves the product further away from a generic ecommerce store and makes the **vehicle itself** a first-class part of search, shopping, sourcing and build planning.
 
-## Important
+## V2.0 highlights
 
-Do **not** deploy V1.4.2 over the live store before the dependency-backed checks pass on your PC. This package has passed the static audit included with it, but this workspace cannot download npm dependencies or run a real Prisma/TypeScript build against your PostgreSQL database.
+- Step-by-step Vehicle Finder: make → model → year → engine/variant.
+- Verified fitment evidence on `ProductFitment` with source and verification timestamp.
+- Safer fitment semantics: missing catalogue evidence is **unconfirmed**, not automatically “does not fit”.
+- Vehicle-aware product search and exact-variant shopping.
+- Checkout preflight for vehicle selection, fitment evidence and stock.
+- Missing vehicle + missing part sourcing requests.
+- Admin Sourcing Desk with catalogue-health metrics and request workflow.
+- Deterministic Build Advisor for Daily, Reliability, Street and Track goals.
+- Build targets now support horsepower, torque, budget and goal.
+- Supplier metadata for warehouse country, lead time and reliability score.
+- Supplier feed/operations ingestion of the new metadata.
+- Corrected vehicle-catalogue importer for the real `VehicleMake -> VehicleModel -> VehicleVariant` schema.
+- Curated vehicle dataset + NHTSA importer tooling included.
+
+## Core API additions
+
+V2 endpoints are mounted under `/api/v2`.
+
+- `GET /api/v2/catalog/status`
+- `GET /api/v2/vehicles/picker`
+- `GET /api/v2/vehicles/resolve`
+- `GET /api/v2/search`
+- `GET /api/v2/fitment/check`
+- `POST /api/v2/fitment/check-batch`
+- `GET /api/v2/products/:id/supplier-options`
+- `GET /api/v2/checkout/preflight`
+- `POST /api/v2/requests/vehicle`
+- `POST /api/v2/requests/part`
+- `GET /api/v2/requests/mine`
+- `GET /api/v2/dashboard`
+- `POST /api/v2/build-advisor`
+- Admin catalogue-health and sourcing-request endpoints.
+
+Existing `/api/products`, `/api/builds`, `/api/admin`, checkout, payments and marketplace routes remain in place. Product and build fitment responses now use the safer V2 fitment evaluator.
+
+## Fitment rule
+
+A product can be:
+
+- `UNIVERSAL` — no vehicle-specific selection required.
+- `VERIFIED_FIT` — an exact variant link exists and has been verified.
+- `CATALOG_FIT` — an exact variant link exists but is not yet manually verified.
+- `UNKNOWN` — no exact fitment evidence is present.
+- `DOES_NOT_FIT` — reserved for explicit incompatibility evidence; catalogue absence alone is not treated as proof of incompatibility.
+
+This distinction matters: SANDMAN should never invent compatibility just to make a sale.
 
 ## Local verification
 
-1. Extract V1.4.2 into a separate folder.
-2. Copy your own `.env` values into it. Never commit `.env`.
-3. Run `npm install`.
-4. Run `./VERIFY-V1.4.2.ps1` in PowerShell, or run `npm run verify`.
-5. Test `npm run prisma:deploy` against a staging/test PostgreSQL database first.
-6. Test Stripe/PayPal in sandbox mode before production.
+From the project root:
 
-`npm install` will create `package-lock.json`. Keep and commit it after the full verification passes.
+```powershell
+npm install
+npx prisma generate
+npx prisma validate
+npm run typecheck
+npm test
+npm run build
+```
 
-## V1.4.2 fixes
+Or run:
 
-- Accepted offers are quantity-1 only at add-to-cart, cart update **and checkout**, so a negotiated unit price cannot be multiplied across extra units.
-- Mixed orders now count only shipped fulfillments belonging to suppliers that still have a non-refunded line in the order.
-- Dropship inventory now has reported stock, reserved stock and buyer-facing available stock.
-- Checkout atomically reserves supplier inventory to prevent two buyers claiming the last known unit.
-- Failed, cancelled and expired checkouts restore supplier reservations.
-- Supplier feed updates preserve live reservations instead of overwriting them.
-- Releasing a reservation recalculates availability from the latest supplier stock, so a supplier feed change cannot accidentally recreate sold-out stock.
-- Supplier reservations are committed after the supplier order exists, with an idempotent repair path for crash windows.
-- Fully refunded dropship lines release an uncommitted supplier hold.
-- Product/search/recommendation availability uses `availableStock`, not the raw supplier snapshot.
+```powershell
+.\VERIFY-V2.0.ps1
+```
 
-## Railway commands
+Never commit `.env`.
 
-Build: `npm run prisma:generate && npm run build`
+## Database migration
 
-Pre-deploy: `npm run prisma:deploy`
+V2.0 includes:
 
-Start: `node dist/src/server.js`
+`prisma/migrations/20260831110000_v20_vehicle_fitment_requests/migration.sql`
 
-Health check: `/api/health`
+For production/Railway use **deploy**, not development migration commands:
 
-Recommended values:
+```text
+npm run prisma:deploy
+```
 
-- `MARKETPLACE_PAYOUT_DELAY_DAYS=7`
-- `CHECKOUT_RESERVATION_MINUTES=30`
-- `BANK_TRANSFER_RESERVATION_HOURS=48`
-- `AUTO_PRICE_SUPPLIER_FEEDS=false` until pricing rules are tested
-- Change `DEFAULT_SUPPLIER=mock` before real supplier orders
+Do **not** run `prisma migrate dev` against the production Railway database.
 
-## External services still required
+## Railway
 
-- Stripe + Stripe Connect for marketplace checkout and seller payouts.
-- PayPal credentials if PayPal checkout is enabled.
-- A real supplier integration/feed for live stock and fulfillment.
-- An email provider for real outbound email.
-- Persistent object storage for seller/review images.
+Recommended service commands:
+
+- Build: `npm run prisma:generate && npm run build`
+- Pre-deploy: `npm run prisma:deploy`
+- Start: `node dist/src/server.js`
+- Health: `/api/health`
+
+After the V2 migration is successfully deployed, the vehicle catalogue can be populated **inside the Railway service environment**. Start with BMW only:
+
+```bash
+node scripts/sync-vehicle-catalog.mjs --source=curated --only-make=BMW --from=1996 --to=2027
+node scripts/vehicle-catalog-check.mjs
+```
+
+Only expand to the full catalogue after the BMW smoke test succeeds.
+
+## Still external / later-stage work
+
+V2.0 does not pretend to include services that require external providers or validated engineering data. You still need real supplier/API credentials, Stripe/PayPal configuration, outbound email, image/object storage and operational/legal setup. VIN decoding, a generative AI mechanic, OEM diagrams and 3D engineering simulation are intentionally later phases.
 
 ## Production safety
 
-Never put payment keys, JWT secrets, supplier secrets or database credentials in source control. Do not run the demo seed in production unless you intentionally set `ALLOW_DEMO_SEED=true`.
+- Never put payment keys, JWT secrets, supplier secrets or database credentials in source control.
+- Do not run demo seeds in production unless intentionally enabled.
+- Treat imported fitment as catalogue evidence, not automatically verified fitment.
+- Do not expose supplier cost or raw supplier feed payloads in public responses.
+- Test payment/refund/fulfillment workflows in sandbox or staging before production.

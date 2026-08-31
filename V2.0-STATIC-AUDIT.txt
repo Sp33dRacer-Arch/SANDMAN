@@ -1,0 +1,44 @@
+SANDMAN V2.0 STATIC AUDIT
+=========================
+
+Audit target: SANDMAN V1.4.2 base + V2.0 automotive-platform upgrade.
+
+STATIC CHECK RESULTS
+--------------------
+TypeScript syntax scan: 62 source/test/seed TS files, 0 syntax errors.
+JavaScript syntax scan: public/store/app.js, public/admin/app.js and vehicle .mjs scripts; 0 syntax errors.
+Prisma structural scan: 43 models, 0 duplicate model fields.
+V2 router size: 368 lines.
+Project TypeScript lines (src/tests/prisma): 6520.
+Admin + storefront JS lines: 1217.
+Curated vehicle model ranges bundled: 355.
+
+MANUAL/STRUCTURAL REVIEW
+------------------------
+- Historical migrations were not edited.
+- New schema changes are isolated in 20260831110000_v20_vehicle_fitment_requests.
+- ProductFitment keeps its existing product+vehicle unique key and gains verification evidence.
+- Missing fitment evidence is UNKNOWN rather than a fabricated incompatibility claim.
+- Public supplier-options response does not expose costCents, rawData or supplier API credentials.
+- Checkout preflight checks vehicle selection, fitment evidence and public stock before payment UI continues.
+- Vehicle and part sourcing requests support anonymous email or authenticated ownership.
+- Admin sourcing routes require ADMIN or STAFF.
+- Vehicle catalogue importer targets the real VehicleMake -> VehicleModel -> VehicleVariant schema.
+- No .env file is included in the upgrade package.
+
+NOT VERIFIED IN THIS WORKSPACE
+------------------------------
+A full dependency-backed verification could not be completed here because npm dependency installation timed out in this workspace. Therefore this audit does NOT claim that Prisma generation/validation, full TypeScript typecheck, Vitest or the production build passed here.
+
+Before deployment, run on the user's local project:
+  npm install
+  npx prisma generate
+  npx prisma validate
+  npm run typecheck
+  npm test
+  npm run build
+
+Production migration must use:
+  npm run prisma:deploy
+
+Never use prisma migrate dev against the Railway production database.
