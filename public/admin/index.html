@@ -53,7 +53,7 @@
   </section>
 
   <div id="app-shell" class="app-shell" hidden>
-    <aside class="sidebar">
+    <aside class="sidebar" id="admin-sidebar" aria-label="Admin sidebar">
       <div class="sidebar-brand">
         <div class="brand-mark"><span>S</span></div>
         <div><strong>SANDMAN</strong><small>ADMIN CONSOLE</small></div>
@@ -86,10 +86,11 @@
         </button>
       </div>
     </aside>
+    <button class="sidebar-backdrop" id="sidebar-backdrop" aria-label="Close admin menu" type="button"></button>
 
     <main class="main">
       <header class="topbar">
-        <button id="mobile-menu-button" class="icon-btn mobile-only" aria-label="Open menu">☰</button>
+        <button id="mobile-menu-button" class="icon-btn mobile-only" aria-label="Open menu" aria-expanded="false">☰</button>
         <div class="global-search-wrap">
           <span class="search-icon">⌕</span>
           <input id="global-search" type="search" placeholder="Search SANDMAN…" autocomplete="off" />
@@ -99,7 +100,7 @@
           <span id="api-pill" class="api-pill"><i class="status-dot"></i> LIVE API</span>
           <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode"><span class="theme-icon" aria-hidden="true">☼</span></button>
           <button id="refresh-button" class="icon-btn" title="Refresh current page">↻</button>
-          <button id="quick-add-button" class="btn btn-primary"><span>＋</span> Add product</button>
+          <button id="quick-add-button" class="btn btn-primary"><span aria-hidden="true">＋</span><span class="quick-add-label">Add product</span></button>
         </div>
       </header>
 

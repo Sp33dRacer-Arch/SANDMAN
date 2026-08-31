@@ -42,6 +42,32 @@
   }
   function toggleTheme() { setTheme(currentTheme() === 'light' ? 'dark' : 'light'); }
 
+
+  function setAdminMenu(open) {
+    const sidebar = $('#admin-sidebar');
+    const backdrop = $('#sidebar-backdrop');
+    const button = $('#mobile-menu-button');
+    sidebar?.classList.toggle('open', open);
+    backdrop?.classList.toggle('open', open);
+    document.body.classList.toggle('admin-menu-open', open);
+    button?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+
+  function enhanceResponsiveTables(root = document) {
+    $$('.table-wrap table', root).forEach(table => {
+      const labels = $$('thead th', table).map(th => th.textContent.trim());
+      if (!labels.length) return;
+      table.classList.add('responsive-table');
+      $$('tbody tr', table).forEach(row => {
+        [...row.children].forEach((cell, index) => {
+          if (cell.tagName !== 'TD') return;
+          if (cell.colSpan > 1) { cell.dataset.label = ''; cell.classList.add('table-empty-cell'); return; }
+          cell.dataset.label = labels[index] || (index === row.children.length - 1 ? 'Action' : '');
+        });
+      });
+    });
+  }
+
   function safeJson(value) {
     try { return value ? JSON.parse(value) : null; } catch { return null; }
   }
@@ -192,7 +218,7 @@
   async function navigate(view) {
     state.view = view;
     setActiveNav(view);
-    $('.sidebar')?.classList.remove('open');
+    setAdminMenu(false);
     viewRoot.innerHTML = `<div class="empty-state"><div><b>Loading ${esc(view)}…</b><span>Syncing with SANDMAN API</span></div></div>`;
     try {
       if (view === 'overview') await renderOverview();
@@ -939,7 +965,8 @@
   $('#refresh-button').addEventListener('click', () => navigate(state.view));
   $('#quick-add-button').addEventListener('click', () => openProductModal().catch(error => toast('Could not open product form', error.message, 'error')));
   $('#logout-button').addEventListener('click', () => logout());
-  $('#mobile-menu-button').addEventListener('click', () => $('.sidebar')?.classList.toggle('open'));
+  $('#mobile-menu-button').addEventListener('click', () => setAdminMenu(!$('#admin-sidebar')?.classList.contains('open')));
+  $('#sidebar-backdrop').addEventListener('click', () => setAdminMenu(false));
   $('#global-search').addEventListener('keydown', event => {
     if (event.key === 'Enter') {
       const q = event.target.value.trim();
@@ -948,7 +975,7 @@
   });
   document.addEventListener('keydown', event => {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); $('#global-search')?.focus(); }
-    if (event.key === 'Escape' && modalRoot.innerHTML) closeModal();
+    if (event.key === 'Escape') { if (modalRoot.innerHTML) closeModal(); setAdminMenu(false); }
   });
 
   $$('.clickable-order').forEach(() => {});
@@ -956,6 +983,16 @@
     const row = event.target.closest('.clickable-order');
     if (row?.dataset.orderId) openOrderModal(row.dataset.orderId).catch(error => toast('Could not load order', error.message, 'error'));
   });
+
+  let responsiveTableFrame = 0;
+  const refreshResponsiveTables = () => { enhanceResponsiveTables(viewRoot); enhanceResponsiveTables(modalRoot); };
+  const responsiveTableObserver = new MutationObserver(() => {
+    cancelAnimationFrame(responsiveTableFrame);
+    responsiveTableFrame = requestAnimationFrame(refreshResponsiveTables);
+  });
+  responsiveTableObserver.observe(viewRoot, { childList: true, subtree: true });
+  responsiveTableObserver.observe(modalRoot, { childList: true, subtree: true });
+  refreshResponsiveTables();
 
   (async function boot() {
     syncThemeUi();

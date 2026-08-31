@@ -1,0 +1,31 @@
+SANDMAN RESPONSIVE + ADMIN OPTIMIZATION — POST-SCAN AUDIT
+=========================================================
+
+STATIC RESULT: PASS WITH REMAINING NON-BLOCKING FOLLOW-UP ITEMS
+
+Fixes applied during the post-generation scan:
+- Fixed mobile filters so changes can be staged inside the bottom sheet and applied together with Show results instead of rerendering/closing after every selection.
+- Replaced the mobile filter Show results anchor with a real button.
+- Fixed search panel aria-hidden state when routing, submitting search, or pressing Escape.
+- Added coordination so only one desktop navigation dropdown stays open and outside clicks close dropdowns.
+- Fixed responsive admin table enhancement so tables inside modals are enhanced as well as page tables.
+- Debounced responsive admin table rescans with requestAnimationFrame.
+- Added mobile search-panel safe-area top positioning.
+
+Static checks repeated after fixes:
+- PASS: public/store/app.js JavaScript syntax (node --check)
+- PASS: public/admin/app.js JavaScript syntax (node --check)
+- PASS: Store/Admin HTML parse
+- PASS: No duplicate static HTML IDs
+- PASS: Store CSS brace balance
+- PASS: Admin CSS brace balance
+- PASS: No empty href="#" links remain in the patched public UI
+- PASS: All six footer information routes are registered
+- PASS: Optimized WebP logo route matches Express /assets static mount
+- PASS: Patch changes remain limited to public storefront/admin assets + documentation
+
+Remaining follow-up items before treating the site as fully production-finished:
+1. Terms, Privacy, Buyer Protection, Returns and Shipping copy is operational draft content and should be legally reviewed/customized for the countries where SANDMAN trades.
+2. Native browser prompt()/confirm() dialogs still exist in several legacy storefront/admin flows. They are functional but should eventually become SANDMAN modals/bottom sheets for a fully polished mobile UX.
+3. The supplied V2 archive does not include package-lock.json and this container could not complete dependency installation. Run the normal Prisma validate, typecheck, tests and build in the existing local SANDMAN repository before pushing.
+4. Hash-based storefront routes remain an SEO limitation. This optimization patch intentionally does not rewrite routing/backend architecture.

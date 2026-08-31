@@ -1,0 +1,60 @@
+SANDMAN RESPONSIVE + ADMIN OPTIMIZATION PATCH
+=============================================
+
+This patch is intended to be overlaid on the current SANDMAN V2.0 project after the light-mode patch.
+It does not change the database or backend API.
+
+1) Extract the patch ZIP in Downloads.
+
+2) Overlay it onto your working repo WITHOUT touching .git, .env or node_modules.
+
+PowerShell example:
+
+robocopy "$env:USERPROFILE\Downloads\SANDMAN-RESPONSIVE-ADMIN-OPTIMIZATION-PATCH" "$env:USERPROFILE\Downloads\SANDMAN-backend" /E /XD .git node_modules /XF .env /R:1 /W:1
+
+3) Open the project:
+
+cd "$env:USERPROFILE\Downloads\SANDMAN-backend"
+
+4) Verify the changed browser JavaScript:
+
+node --check public\store\app.js
+node --check public\admin\app.js
+
+5) Run the normal project verification using your installed dependencies:
+
+npx prisma validate
+npm run typecheck
+npm test
+npm run build
+
+6) Inspect changes BEFORE staging:
+
+git status
+git diff -- public\store public\admin CHANGELOG-RESPONSIVE-OPTIMIZATION.md INSTALL-RESPONSIVE-OPTIMIZATION.txt STATIC-AUDIT-RESPONSIVE-OPTIMIZATION.txt
+
+7) If all checks pass, stage ONLY this patch:
+
+git add public\store\app.js public\store\index.html public\store\styles.css public\store\assets\sandman-logo.webp public\admin\app.js public\admin\index.html public\admin\styles.css CHANGELOG-RESPONSIVE-OPTIMIZATION.md INSTALL-RESPONSIVE-OPTIMIZATION.txt STATIC-AUDIT-RESPONSIVE-OPTIMIZATION.txt
+
+git commit -m "Optimize SANDMAN desktop mobile and admin UX"
+git push origin main
+
+Railway should then redeploy from main.
+
+8) After Railway is Active, hard refresh:
+
+Ctrl + F5
+
+CHECK AFTER DEPLOY
+==================
+- Desktop header shows Shop / Vehicles / Builds / Marketplace.
+- Search and Bag remain accessible on mobile.
+- Mobile menu scrolls and is grouped.
+- Shop Filters opens as a bottom sheet on mobile.
+- Normal phones show two product cards per row.
+- Product pages show a sticky mobile Add button.
+- Buyer protection / Shipping / Returns / Terms / Privacy / About each open a real page.
+- Admin mobile menu has a backdrop and closes correctly.
+- Admin tables become labelled cards on narrow screens.
+- Dark/light mode still works in storefront and admin.
