@@ -1,16 +1,21 @@
 #!/usr/bin/env node
-import { PrismaClient, Prisma } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
-
 try {
-  const model = Prisma.dmmf.datamodel.models.find(m => m.name === "VehicleVariant");
-  if (!model) throw new Error("VehicleVariant model not found.");
-  console.log("VehicleVariant fields:", model.fields.filter(f => f.kind !== "object").map(f => f.name).join(", "));
-  const count = await prisma.vehicleVariant.count();
-  console.log("VehicleVariant rows:", count);
-  const samples = await prisma.vehicleVariant.findMany({ take: 12 });
-  console.log("Sample rows:");
-  console.dir(samples, { depth: 4 });
+  const [makes, models, variants] = await Promise.all([
+    prisma.vehicleMake.count(),
+    prisma.vehicleModel.count(),
+    prisma.vehicleVariant.count()
+  ]);
+  console.log({ makes, models, variants });
+  const sample = await prisma.vehicleVariant.findMany({
+    take: 20,
+    include: { model: { include: { make: true } } },
+    orderBy: { yearStart: "desc" }
+  });
+  for (const v of sample) {
+    console.log(`${v.model.make.name} | ${v.model.name} | ${v.yearStart}-${v.yearEnd} | ${v.trim ?? "-"} | ${v.chassisCode ?? "-"} | ${v.engineCode} | ${v.engineName}`);
+  }
 } finally {
   await prisma.$disconnect();
 }
