@@ -1,0 +1,26 @@
+SANDMAN PRODUCT IMAGE UPLOAD SETUP
+=================================
+
+SANDMAN intentionally does not save uploaded images to Railway's normal application filesystem because deployments/restarts can replace ephemeral files.
+
+To enable the new Choose Photos buttons, create a Cloudinary account/product environment and add these variables to the SANDMAN Railway service:
+
+CLOUDINARY_CLOUD_NAME=...
+CLOUDINARY_API_KEY=...
+CLOUDINARY_API_SECRET=...
+
+Keep CLOUDINARY_API_SECRET in Railway only. Never paste it into storefront/admin JavaScript or commit it to Git.
+
+After saving the variables, redeploy SANDMAN.
+
+Without Cloudinary configured:
+- Existing stored images still work.
+- Admins and sellers can still add image URLs.
+- Choosing a local image file will show a clear "not configured" message rather than storing the file unsafely.
+
+Supported local uploads:
+- JPG
+- PNG
+- WebP
+- up to 8 images per product/listing
+- up to 10 MB each

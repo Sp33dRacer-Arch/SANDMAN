@@ -46,7 +46,7 @@ const listingSchema = z.object({
   isUniversal: z.boolean().default(true),
   fitmentVehicleVariantIds: z.array(z.string().min(1)).max(100).default([]),
   images: z.array(z.object({
-    url: z.string().url(),
+    url: z.string().url().refine(value => value.startsWith('https://'), 'Image URL must use HTTPS'),
     alt: z.string().max(240).optional(),
     position: z.number().int().min(0).max(20).default(0),
   })).max(8).default([]),
@@ -175,6 +175,15 @@ marketplaceRouter.get('/mine', requireAuth, asyncHandler(async (req, res) => {
   res.json(items);
 }));
 
+marketplaceRouter.get('/mine/:id', requireAuth, asyncHandler(async (req, res) => {
+  const product = await prisma.product.findFirst({
+    where: { id: routeParam(req.params.id, 'id'), sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
+    include: { category: true, images: { orderBy: { position: 'asc' } }, fitments: { select: { vehicleVariantId: true } } },
+  });
+  if (!product) throw new HttpError(404, 'Listing not found');
+  res.json(product);
+}));
+
 marketplaceRouter.get('/sales', requireAuth, asyncHandler(async (req, res) => {
   const items = await prisma.orderItem.findMany({
     where: {
@@ -192,12 +201,12 @@ marketplaceRouter.get('/sales', requireAuth, asyncHandler(async (req, res) => {
 }));
 
 marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
-  const data = listingSchema.extend({ commissionAccepted: z.literal(true) }).parse(req.body);
+  const data = listingSchema.extend({
+    commissionAccepted: z.literal(true),
+    publish: z.boolean().default(true),
+  }).parse(req.body);
   const seller = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
   if (!seller) throw new HttpError(404, 'Seller account not found');
-  if (!seller.stripeConnectAccountId || !seller.stripeConnectPayoutsEnabled) {
-    throw new HttpError(409, 'Connect and verify a Stripe payout account before publishing a marketplace listing');
-  }
   if (!seller.sellerCommissionAcceptedAt) {
     await prisma.user.update({ where: { id: seller.id }, data: { sellerCommissionAcceptedAt: new Date() } });
   }
@@ -208,8 +217,10 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
   const category = await prisma.category.findUnique({ where: { id: data.categoryId } });
   if (!category) throw new HttpError(400, 'Invalid category');
 
-  const { images, fitmentVehicleVariantIds, commissionAccepted: _commissionAccepted, ...listing } = data;
+  const { images, fitmentVehicleVariantIds, commissionAccepted: _commissionAccepted, publish, ...listing } = data;
   if (listing.requiresFitment && !listing.isUniversal && fitmentVehicleVariantIds.length === 0) throw new HttpError(400, 'Add at least one compatible vehicle or mark the part universal');
+  const canPublish = Boolean(seller.stripeConnectAccountId && seller.stripeConnectPayoutsEnabled);
+  const status = publish && canPublish ? 'ACTIVE' : 'DRAFT';
   const product = await prisma.product.create({
     data: {
       ...listing,
@@ -217,7 +228,7 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
       slug,
       sourceType: 'MARKETPLACE',
       sellerId: req.auth!.userId,
-      status: 'ACTIVE',
+      status,
       currency: 'USD',
       taxable: true,
       images: { create: images },
@@ -230,17 +241,56 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
     },
   });
 
-  res.status(201).json(product);
+  res.status(201).json({
+    ...product,
+    publicationBlocked: publish && !canPublish,
+    publicationMessage: publish && !canPublish ? 'Listing saved as a draft. Complete seller payout verification before publishing.' : null,
+  });
 }));
 
 marketplaceRouter.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
+  const id = routeParam(req.params.id, 'id');
   const existing = await prisma.product.findFirst({
-    where: { id: routeParam(req.params.id, 'id'), sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
+    where: { id, sellerId: req.auth!.userId, sourceType: 'MARKETPLACE' },
+    include: { fitments: { select: { vehicleVariantId: true } } },
   });
   if (!existing) throw new HttpError(404, 'Listing not found');
 
-  const data = listingSchema.omit({ images: true, fitmentVehicleVariantIds: true }).partial().parse(req.body);
-  const product = await prisma.product.update({ where: { id: existing.id }, data });
+  const data = listingSchema.partial().extend({
+    status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
+  }).parse(req.body);
+  if (data.status === 'ACTIVE') {
+    const seller = await prisma.user.findUnique({ where: { id: req.auth!.userId }, select: { stripeConnectAccountId: true, stripeConnectPayoutsEnabled: true } });
+    if (!seller?.stripeConnectAccountId || !seller.stripeConnectPayoutsEnabled) {
+      throw new HttpError(409, 'Complete seller payout verification before publishing this listing');
+    }
+  }
+
+  const { images, fitmentVehicleVariantIds, ...productData } = data;
+  const requiresFitment = productData.requiresFitment ?? existing.requiresFitment;
+  const isUniversal = productData.isUniversal ?? existing.isUniversal;
+  const fitmentIds = fitmentVehicleVariantIds ?? existing.fitments.map(fitment => fitment.vehicleVariantId);
+  if (requiresFitment && !isUniversal && fitmentIds.length === 0) throw new HttpError(400, 'Add at least one compatible vehicle or mark the part universal');
+
+  const product = await prisma.$transaction(async tx => {
+    await tx.product.update({ where: { id }, data: productData });
+    if (images) {
+      await tx.productImage.deleteMany({ where: { productId: id } });
+      if (images.length) await tx.productImage.createMany({ data: images.map(image => ({ ...image, productId: id })) });
+    }
+    if (fitmentVehicleVariantIds) {
+      const requestedIds = [...new Set(fitmentVehicleVariantIds)];
+      if (requestedIds.length) {
+        await tx.productFitment.deleteMany({ where: { productId: id, vehicleVariantId: { notIn: requestedIds } } });
+      } else {
+        await tx.productFitment.deleteMany({ where: { productId: id } });
+      }
+      const existingIds = new Set(existing.fitments.map(fitment => fitment.vehicleVariantId));
+      const addedIds = requestedIds.filter(vehicleVariantId => !existingIds.has(vehicleVariantId));
+      if (addedIds.length) await tx.productFitment.createMany({ data: addedIds.map(vehicleVariantId => ({ productId: id, vehicleVariantId })) });
+    }
+    return tx.product.findUnique({ where: { id }, include: { category: true, images: { orderBy: { position: 'asc' } } } });
+  });
   res.json(product);
 }));
 

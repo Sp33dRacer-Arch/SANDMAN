@@ -1,6 +1,12 @@
 import 'dotenv/config';
 import { z } from 'zod';
 
+const optionalNonEmptyString = z.preprocess(value => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}, z.string().min(1).optional());
+
 const booleanFromEnv = z.preprocess(value => {
   if (typeof value === 'boolean') return value;
   if (typeof value !== 'string') return value;
@@ -30,6 +36,11 @@ const schema = z.object({
   PAYPAL_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
 
   BANK_TRANSFER_INSTRUCTIONS: z.string().max(2000).optional(),
+
+  // Optional signed browser uploads. Configure all three to enable image-file uploads.
+  CLOUDINARY_CLOUD_NAME: optionalNonEmptyString,
+  CLOUDINARY_API_KEY: optionalNonEmptyString,
+  CLOUDINARY_API_SECRET: optionalNonEmptyString,
 
   EMAIL_DELIVERY_WEBHOOK_URL: z.string().url().optional(),
   EMAIL_DELIVERY_WEBHOOK_SECRET: z.string().optional(),

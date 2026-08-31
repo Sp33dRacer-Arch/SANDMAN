@@ -20,6 +20,8 @@
   const toastRoot = $('#toast-root');
 
   const THEME_KEY = 'sandman-theme';
+  try { const savedTheme = localStorage.getItem(THEME_KEY); document.documentElement.dataset.theme = savedTheme === 'dark' ? 'dark' : 'light'; }
+  catch { document.documentElement.dataset.theme = 'light'; }
   function currentTheme() { return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'; }
   function syncThemeUi() {
     const light = currentTheme() === 'light';
@@ -146,6 +148,40 @@
       throw new Error(message);
     }
     return data;
+  }
+
+  async function uploadAdminProductImages(files) {
+    const chosen = [...(files || [])];
+    if (!chosen.length) return [];
+    if (chosen.length > 8) throw new Error('You can upload up to 8 images at a time.');
+    const output = [];
+    for (const file of chosen) {
+      if (!['image/jpeg','image/png','image/webp'].includes(file.type)) throw new Error(`${file.name} must be JPG, PNG or WebP.`);
+      if (file.size > 10 * 1024 * 1024) throw new Error(`${file.name} is larger than 10 MB.`);
+      const signature = await api('/api/uploads/signature', { method:'POST', body:JSON.stringify({ purpose:'catalogue' }) });
+      const body = new FormData();
+      body.append('file', file);
+      body.append('api_key', signature.apiKey);
+      body.append('timestamp', String(signature.timestamp));
+      body.append('folder', signature.folder);
+      body.append('public_id', signature.publicId);
+      body.append('signature', signature.signature);
+      const response = await fetch(`https://api.cloudinary.com/v1_1/${encodeURIComponent(signature.cloudName)}/image/upload`, { method:'POST', body });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.secure_url) throw new Error(data?.error?.message || `Could not upload ${file.name}.`);
+      output.push({ url:data.secure_url, alt:file.name.replace(/\.[^.]+$/, '').slice(0, 240), position:output.length });
+    }
+    return output;
+  }
+
+  function renderAdminProductImages(form) {
+    const images = form._sandmanImages || [];
+    const list = $('[data-admin-image-list]', form);
+    const count = $('[data-admin-image-count]', form);
+    if (count) count.textContent = `${images.length}/8`;
+    if (!list) return;
+    list.innerHTML = images.length ? images.map((image,index) => `<figure class="admin-upload-thumb"><img src="${esc(image.url)}" alt="${esc(image.alt || '')}"><button type="button" data-admin-remove-image="${index}" aria-label="Remove image">×</button>${index === 0 ? '<figcaption>Cover</figcaption>' : ''}</figure>`).join('') : '<div class="admin-upload-empty">No product images yet.</div>';
+    $$('[data-admin-remove-image]', list).forEach(button => button.onclick = () => { images.splice(Number(button.dataset.adminRemoveImage),1); images.forEach((image,index) => image.position=index); renderAdminProductImages(form); });
   }
 
   async function checkApi() {
@@ -570,6 +606,7 @@
         <article class="setting-card"><div class="eyebrow">ENVIRONMENT</div><h3>${esc(config.environment.toUpperCase())}</h3><p>Public application URL and server environment currently in use.</p><div class="code-block">${esc(config.appUrl)}\n${esc(config.apiUrl)}</div></article>
         <article class="setting-card"><div class="eyebrow">SECURITY</div><h3>Persistent admin login</h3><p>You are signed in as ${esc(state.user?.email || '')}. A secure HttpOnly refresh session remembers the login for up to ${esc(config.sessionDays)} days while short-lived JWT access tokens are rotated.</p><form id="admin-password-form" class="form-grid"><label class="field span-2"><span>Current password</span><input name="currentPassword" type="password" autocomplete="current-password" required></label><label class="field"><span>New password</span><input name="newPassword" type="password" minlength="10" autocomplete="new-password" required></label><label class="field"><span>Confirm password</span><input name="confirmPassword" type="password" minlength="10" autocomplete="new-password" required></label><button class="btn btn-primary span-2" type="submit">Change password + sign out other sessions</button></form><div style="height:12px"></div><button class="btn btn-danger" data-action="logout">Sign out</button></article>
         <article class="setting-card"><div class="eyebrow">PAYMENTS</div><h3>Checkout providers</h3><p>Stripe Payment Element can surface eligible cards, Apple Pay, Google Pay, Link, bank methods, BNPL and regional methods. PayPal and manual EFT are separate options.</p><div class="status-stack"><span>Stripe <b>${config.payments.stripe?'READY':'NOT CONFIGURED'}</b></span><span>PayPal <b>${config.payments.paypal?'READY':'NOT CONFIGURED'}</b></span><span>Bank / EFT <b>${config.payments.bankTransfer?'READY':'NOT CONFIGURED'}</b></span></div></article>
+        <article class="setting-card"><div class="eyebrow">PRODUCT MEDIA</div><h3>Image uploads</h3><p>Admins and marketplace sellers can upload JPG, PNG and WebP product photos directly when Cloudinary is configured. Image URLs remain available as a fallback.</p><div class="status-stack"><span>Cloudinary <b>${config.imageUploads?.cloudinary?'READY':'NOT CONFIGURED'}</b></span></div></article>
         <article class="setting-card"><div class="eyebrow">OWNER PAYOUTS</div><h3>Money to your business</h3><p>SANDMAN never stores raw payout card or bank numbers. Add your business bank account or supported debit card securely in your payment processor so settled customer funds pay out to you.</p><div class="button-stack"><a class="btn" href="https://dashboard.stripe.com/settings/payouts" target="_blank" rel="noreferrer">Stripe payout settings ↗</a><a class="btn" href="https://www.paypal.com/businessmanage/money" target="_blank" rel="noreferrer">PayPal business money ↗</a></div></article>
         <article class="setting-card"><div class="eyebrow">MARKETPLACE</div><h3>${esc(config.marketplace.commissionPercent)}% SANDMAN commission</h3><p>Marketplace sellers connect a Stripe Connect payout account. On successful Stripe marketplace sales, SANDMAN keeps the configured fee. The seller's net proceeds become transferable after that seller has supplied shipment tracking for every item in the order.</p><div class="code-block">Seller payouts: ${esc(money(config.marketplace.sellerPayoutCents))}\nSANDMAN fees: ${esc(money(config.marketplace.platformFeeCents))}\nPayout records: ${esc(config.marketplace.payoutCount)}</div></article>
         <article class="setting-card"><div class="eyebrow">SYNCEE</div><h3>Manual fulfillment bridge</h3><p>Syncee's public documentation does not expose a retailer-side custom-platform order API. SANDMAN therefore creates a tracked Syncee handoff: open Syncee, pay/forward the supplier order there, then record tracking in SANDMAN.</p><a class="btn" href="${esc(config.syncee.ordersUrl)}" target="_blank" rel="noreferrer">Open Syncee ↗</a></article>
@@ -581,6 +618,7 @@
     const categories = state.cache.categories || await api('/api/admin/categories');
     let product = null;
     if (productId) product = await api(`/api/admin/products/${productId}`);
+    const productImages = (product?.images || []).map((image, index) => ({ url:image.url, alt:image.alt || product?.name || '', position:index }));
     const categoryOptions = categories.map(c => `<option value="${esc(c.id)}" ${product?.categoryId === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
     const supplierSummary = product?.supplierLinks?.length ? product.supplierLinks.map(link => `<div class="order-item"><div><strong>${esc(link.supplier.name)}</strong><small>${esc(link.supplierSku || link.supplierProductId)} · available ${esc(link.availableStock ?? 'n/a')}${link.reservedStock ? ` · ${esc(link.reservedStock)} reserved` : ''}</small></div><strong>${esc(money(link.costCents + link.shippingCents, link.currency))}</strong></div>`).join('') : '<div class="empty-state"><div><b>No supplier linked</b><span>Use Inventory to connect this part to a dropship supplier.</span></div></div>';
     const fitmentSummary = product?.fitments?.length ? product.fitments.slice(0, 12).map(f => `<span class="badge badge-submitted">${esc(f.vehicleVariant.model.make.name)} ${esc(f.vehicleVariant.model.name)} · ${esc(f.vehicleVariant.engineCode)}</span>`).join(' ') : '<span class="subtle">No fitments linked yet.</span>';
@@ -589,16 +627,16 @@
       <form id="product-form" data-id="${esc(productId || '')}">
         <div class="modal-header"><div><h2>${product ? 'Edit product' : 'New engine part'}</h2><p>${product ? esc(product.sku) : 'Create a SANDMAN catalogue item'}</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div>
         <div class="modal-body"><div class="form-grid">
-          <label class="field"><span>Product name</span><input name="name" required minlength="2" value="${esc(product?.name || '')}" placeholder="B58 Upgraded Intercooler" /></label>
+          <label class="field"><span>Product name</span><input name="name" required minlength="2" maxlength="240" value="${esc(product?.name || '')}" placeholder="B58 Upgraded Intercooler" /></label>
           <label class="field"><span>SKU</span><input name="sku" required value="${esc(product?.sku || '')}" placeholder="SM-B58-IC-002" ${product ? 'disabled' : ''} /></label>
           <label class="field"><span>Slug</span><input name="slug" required value="${esc(product?.slug || '')}" placeholder="b58-upgraded-intercooler" ${product ? 'disabled' : ''} /></label>
-          <label class="field"><span>Brand</span><input name="brand" value="${esc(product?.brand || '')}" placeholder="SANDMAN Performance" /></label>
-          <label class="field"><span>Manufacturer part no.</span><input name="manufacturerPn" value="${esc(product?.manufacturerPn || '')}" placeholder="OEM / supplier cross-reference" /></label>
+          <label class="field"><span>Brand</span><input name="brand" maxlength="120" value="${esc(product?.brand || '')}" placeholder="SANDMAN Performance" /></label>
+          <label class="field"><span>Manufacturer part no.</span><input name="manufacturerPn" maxlength="120" value="${esc(product?.manufacturerPn || '')}" placeholder="OEM / supplier cross-reference" /></label>
           <label class="field"><span>Category</span><select name="categoryId" required><option value="">Choose category</option>${categoryOptions}</select></label>
           <label class="field"><span>Retail price (USD)</span><input name="price" type="number" step="0.01" min="0" required value="${product ? (product.priceCents / 100).toFixed(2) : ''}" placeholder="399.99" /></label>
           <label class="field"><span>Compare-at price</span><input name="compareAt" type="number" step="0.01" min="0" value="${product?.compareAtCents ? (product.compareAtCents / 100).toFixed(2) : ''}" placeholder="449.99" /></label>
           <label class="field"><span>Status</span><select name="status">${['DRAFT','ACTIVE','ARCHIVED'].map(v => `<option ${product?.status === v ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
-          <label class="field"><span>Image URL</span><input name="imageUrl" type="url" value="${esc(product?.images?.[0]?.url || '')}" placeholder="https://…" ${product ? 'disabled' : ''} /></label>
+          <div class="field span-2 admin-image-manager"><div class="admin-image-head"><div><span>Product images</span><small>Upload up to 8 JPG, PNG or WebP images. The first image is the cover.</small></div><b data-admin-image-count>${productImages.length}/8</b></div><label class="admin-upload-drop"><input id="admin-product-image-files" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden><strong>＋ Choose images</strong><small>Up to 10 MB each</small></label><div class="admin-image-url-row"><input id="admin-product-image-url" type="url" placeholder="Or paste an image URL"><button class="btn" id="admin-add-image-url" type="button">Add URL</button></div><div class="admin-upload-grid" data-admin-image-list></div></div>
           <label class="field span-2"><span>Short description</span><input name="shortDesc" maxlength="500" value="${esc(product?.shortDesc || '')}" placeholder="Short storefront summary" /></label>
           <label class="field span-2"><span>Description</span><textarea name="description" required minlength="10" placeholder="Specifications, materials and verified supplier information…">${esc(product?.description || '')}</textarea></label>
           <div class="divider-title">Storefront details</div>
@@ -617,6 +655,28 @@
         </div></div>
         <div class="modal-footer">${product ? '<button type="button" class="btn btn-danger" data-action="archive-product" data-id="' + esc(product.id) + '">Archive</button><button type="button" class="btn" data-action="manage-fitments" data-id="' + esc(product.id) + '">Manage fitments</button>' : ''}<button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">${product ? 'Save changes' : 'Create product'}</button></div>
       </form>`, 'modal-lg');
+    const productForm = $('#product-form');
+    productForm._sandmanImages = productImages;
+    renderAdminProductImages(productForm);
+    $('#admin-product-image-files', productForm).onchange = async event => {
+      const files = [...event.target.files];
+      if (!files.length) return;
+      if (productImages.length + files.length > 8) { toast('Too many images', 'Products support up to 8 images.'); event.target.value = ''; return; }
+      const drop = event.target.closest('.admin-upload-drop'); drop.classList.add('uploading');
+      try {
+        const uploaded = await uploadAdminProductImages(files);
+        uploaded.forEach(image => { image.position = productImages.length; productImages.push(image); });
+        renderAdminProductImages(productForm); toast('Images uploaded', `${uploaded.length} image${uploaded.length === 1 ? '' : 's'} added.`);
+      } catch (error) { toast('Upload failed', error.message); }
+      finally { drop.classList.remove('uploading'); event.target.value = ''; }
+    };
+    $('#admin-add-image-url', productForm).onclick = () => {
+      const input = $('#admin-product-image-url', productForm); const url = input.value.trim();
+      if (!url) return;
+      if (productImages.length >= 8) return toast('Too many images', 'Products support up to 8 images.');
+      try { const parsed = new URL(url); if (parsed.protocol !== 'https:') throw new Error('https required'); } catch { return toast('Invalid URL', 'Enter a complete https:// image URL.'); }
+      productImages.push({ url, alt:product?.name || 'SANDMAN product', position:productImages.length }); input.value = ''; renderAdminProductImages(productForm);
+    };
   }
 
   async function submitProductForm(form) {
@@ -652,12 +712,11 @@
       specs: Object.keys(specs).length ? specs : undefined,
       seoTitle: optionalString(fd.get('seoTitle')),
       seoDescription: optionalString(fd.get('seoDescription')),
+      images: (form._sandmanImages || []).map((image, index) => ({ url:image.url, alt:image.alt || String(fd.get('name') || ''), position:index })),
     };
     if (!productId) {
       payload.sku = String(fd.get('sku') || '');
       payload.slug = String(fd.get('slug') || '');
-      const imageUrl = optionalString(fd.get('imageUrl'));
-      payload.images = imageUrl ? [{ url: imageUrl, alt: payload.name, position: 0 }] : [];
       await api('/api/admin/products', { method: 'POST', body: JSON.stringify(payload) });
       toast('Product created', `${payload.name} is now in SANDMAN.`);
     } else {

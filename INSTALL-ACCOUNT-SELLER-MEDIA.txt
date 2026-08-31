@@ -1,0 +1,21 @@
+SANDMAN ACCOUNT / SELLER / MEDIA UPGRADE
+========================================
+
+This is an in-place patch. It does not replace the SANDMAN database or rewrite the existing commerce architecture.
+
+After copying the patch into C:\Users\asand\Downloads\SANDMAN-backend run:
+
+node --check public\store\app.js
+node --check public\admin\app.js
+npx prisma validate
+npm run typecheck
+npm test
+npm run build
+git diff --check
+git status
+
+No new Prisma migration is required. The upgrade reuses ProductImage and existing marketplace/account models.
+
+For local-file product image uploads, configure the three CLOUDINARY_* Railway variables described in CLOUDINARY-IMAGE-UPLOAD-SETUP.txt. Image URLs continue to work without those variables.
+
+Do not commit .env or any Cloudinary/Stripe/PayPal secrets.

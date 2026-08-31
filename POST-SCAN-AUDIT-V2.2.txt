@@ -1,0 +1,93 @@
+SANDMAN V2.2 ACCOUNT / SELLER / MEDIA — POST-SCAN AUDIT
+=======================================================
+Date: 2026-08-31
+
+RESULT
+------
+Static/source scan after fixes: PASS
+Dependency-backed local verification is still required before commit/push.
+
+REAL ISSUES FOUND AND FIXED
+---------------------------
+1. Light-mode persistence script was inline and would be blocked by the production Helmet CSP.
+   FIX: removed inline scripts, set HTML default to data-theme="light", and restored saved theme from external app.js.
+
+2. Default light-mode buttons initially advertised the wrong action before deferred JavaScript ran.
+   FIX: initial icons/labels now correctly offer Dark mode while the page starts light.
+
+3. Blank optional Cloudinary variables could fail environment parsing instead of behaving as unconfigured.
+   FIX: blank/whitespace Cloudinary values normalize to undefined.
+
+4. Seller listing edits could delete and recreate ProductFitment rows, destroying admin verification metadata.
+   FIX: unchanged fitments are preserved; only removed fitments are deleted and only new fitments are created.
+
+5. Seller editing could still drop existing fitments that were not represented in the seller's current Garage.
+   FIX: non-Garage existing fitments are preserved in the submitted edit payload.
+
+6. Seller Sales showed too little destination information for fulfilment.
+   FIX: full paid-order shipping address is shown only to the seller who owns the marketplace line.
+
+7. First-time payout setup silently defaulted the connected-account country to ZA.
+   FIX: seller must enter a valid two-letter legal seller country before account creation.
+
+8. Seller-profile bio frontend limit did not match the backend.
+   FIX: both now use the backend 1000-character limit.
+
+9. Long uploaded filenames could produce alt text longer than the API accepts.
+   FIX: generated image alt text is capped to 240 characters.
+
+10. Saved phone numbers were not returned by normal login/refresh public-user payloads.
+    FIX: public user payload now includes phone, so Profile & Settings can display an existing saved phone number.
+
+11. Image URL fields accepted non-HTTPS URLs that the production CSP would not display.
+    FIX: marketplace/admin APIs and both browser UIs now require HTTPS image URLs.
+
+12. New seller/profile inputs had several frontend/backend constraint mismatches.
+    FIX: relevant maxlength/min/max values are aligned with the Zod API schemas.
+
+STATIC CHECKS COMPLETED
+-----------------------
+- Storefront JavaScript syntax: PASS
+- Admin JavaScript syntax: PASS
+- Storefront/Admin HTML parse: PASS
+- Duplicate static HTML IDs: PASS (none found)
+- Storefront/Admin CSS brace structure: PASS
+- Inline script scan under strict CSP: PASS (none)
+- Git conflict-marker scan: PASS
+- Frontend literal API-call prefix scan: PASS
+- Static hash-navigation target scan: PASS
+- Relative TypeScript import-resolution scan: PASS
+- Cloudinary API secret absent from public JS: PASS
+- Catalogue upload route requires ADMIN/STAFF: PASS
+- Marketplace upload route requires authentication: PASS
+- Light mode default markers: PASS
+- Fitment metadata preservation markers: PASS
+- Full seller shipping-address display marker: PASS
+- Explicit payout-country input marker: PASS
+- HTTPS image URL enforcement marker: PASS
+- .env is not included in this patch: PASS
+
+NO PRISMA MIGRATION REQUIRED
+----------------------------
+The upgrade reuses the existing ProductImage, ProductFitment, User and SellerProfile fields/models.
+
+KNOWN REMAINING INTEGRATION / NON-BLOCKING RISKS
+------------------------------------------------
+- Stripe Connect seller onboarding still uses the project's existing Accounts v1 flow. The user's Stripe account has already reported an Accounts v1 compatibility error. This patch does not migrate Connect to Accounts v2.
+- Removing an image from SANDMAN removes the database reference but does not yet delete the corresponding Cloudinary asset. Abandoned/partially failed uploads can therefore leave orphaned Cloudinary files.
+- Browser-side file type/10 MB checks improve UX, but a hostile authenticated client could bypass browser validation. For stronger production abuse controls, configure Cloudinary-side upload restrictions/presets/quotas as well.
+- Native browser prompt()/confirm() dialogs still exist in older non-media flows (reviews, some security/support actions).
+- No real browser/E2E, Railway runtime, Cloudinary credential, Stripe, or payment test was possible in this static container scan.
+
+MANDATORY LOCAL VERIFICATION BEFORE PUSH
+----------------------------------------
+node --check public\store\app.js
+node --check public\admin\app.js
+npx prisma validate
+npm run typecheck
+npm test
+npm run build
+git diff --check
+git status
+
+Do not push if any command fails.

@@ -21,11 +21,12 @@ const registerSchema = z.object({
   lastName: z.string().min(1).max(80).optional(),
 });
 
-const publicUser = (user: { id: string; email: string; firstName: string | null; lastName: string | null; role: 'CUSTOMER' | 'ADMIN' | 'STAFF'; emailVerifiedAt?: Date | null; twoFactorEnabled?: boolean }) => ({
+const publicUser = (user: { id: string; email: string; firstName: string | null; lastName: string | null; phone?: string | null; role: 'CUSTOMER' | 'ADMIN' | 'STAFF'; emailVerifiedAt?: Date | null; twoFactorEnabled?: boolean }) => ({
   id: user.id,
   email: user.email,
   firstName: user.firstName,
   lastName: user.lastName,
+  phone: user.phone ?? null,
   role: user.role,
   emailVerified: Boolean(user.emailVerifiedAt),
   twoFactorEnabled: Boolean(user.twoFactorEnabled),
@@ -293,5 +294,19 @@ authRouter.get('/me', requireAuth, asyncHandler(async (req, res) => {
     select: { id: true, email: true, firstName: true, lastName: true, phone: true, role: true, createdAt: true, emailVerifiedAt: true, twoFactorEnabled: true },
   });
   if (!user) throw new HttpError(404, 'User not found');
-  res.json(user);
+  res.json({ ...user, emailVerified: Boolean(user.emailVerifiedAt) });
+}));
+
+authRouter.patch('/me', requireAuth, asyncHandler(async (req, res) => {
+  const data = z.object({
+    firstName: z.string().trim().min(1).max(80).nullable().optional(),
+    lastName: z.string().trim().min(1).max(80).nullable().optional(),
+    phone: z.string().trim().min(5).max(40).nullable().optional(),
+  }).parse(req.body);
+  const user = await prisma.user.update({
+    where: { id: req.auth!.userId },
+    data,
+    select: { id: true, email: true, firstName: true, lastName: true, phone: true, role: true, createdAt: true, emailVerifiedAt: true, twoFactorEnabled: true },
+  });
+  res.json({ ...user, emailVerified: Boolean(user.emailVerifiedAt) });
 }));

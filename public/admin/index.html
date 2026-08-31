@@ -1,15 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0b0b0a" />
-  <script>
-    (() => {
-      try { document.documentElement.dataset.theme = localStorage.getItem('sandman-theme') === 'light' ? 'light' : 'dark'; }
-      catch { document.documentElement.dataset.theme = 'dark'; }
-    })();
-  </script>
+  <meta name="theme-color" content="#f4f1e8" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
   <title>SANDMAN — Admin</title>
   <link rel="stylesheet" href="/admin/styles.css" />
@@ -44,7 +38,7 @@
         </button>
         <p id="login-error" class="form-error" hidden></p>
       </form>
-      <button class="login-theme-toggle" data-theme-toggle type="button"><span class="theme-icon" aria-hidden="true">☼</span><span class="theme-label">Light mode</span></button>
+      <button class="login-theme-toggle" data-theme-toggle type="button"><span class="theme-icon" aria-hidden="true">☾</span><span class="theme-label">Dark mode</span></button>
       <div class="login-meta">
         <span><i class="status-dot"></i> API <b id="login-api-status">checking</b></span>
         <span>ADMIN V2.0</span>
@@ -98,7 +92,7 @@
         </div>
         <div class="topbar-actions">
           <span id="api-pill" class="api-pill"><i class="status-dot"></i> LIVE API</span>
-          <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode"><span class="theme-icon" aria-hidden="true">☼</span></button>
+          <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode"><span class="theme-icon" aria-hidden="true">☾</span></button>
           <button id="refresh-button" class="icon-btn" title="Refresh current page">↻</button>
           <button id="quick-add-button" class="btn btn-primary"><span aria-hidden="true">＋</span><span class="quick-add-label">Add product</span></button>
         </div>

@@ -27,6 +27,7 @@ import { securityRouter } from './modules/security/security.routes';
 import { opsRouter } from './modules/ops/ops.routes';
 import { supplierFeedRouter } from './modules/supplier-feed/supplier-feed.routes';
 import { v2Router } from './modules/v2/v2.routes';
+import { uploadsRouter } from './modules/uploads/uploads.routes';
 
 export const app = express();
 
@@ -38,7 +39,7 @@ app.use(helmet({
       scriptSrc: ["'self'", 'https://js.stripe.com', 'https://www.paypal.com'],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", 'https://api.stripe.com', 'https://*.stripe.com', 'https://www.paypal.com', 'https://*.paypal.com'],
+      connectSrc: ["'self'", 'https://api.stripe.com', 'https://*.stripe.com', 'https://www.paypal.com', 'https://*.paypal.com', 'https://api.cloudinary.com'],
       frameSrc: ["'self'", 'https://js.stripe.com', 'https://hooks.stripe.com', 'https://www.paypal.com', 'https://*.paypal.com'],
       fontSrc: ["'self'", 'data:'],
     },
@@ -83,6 +84,7 @@ app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
 app.use('/api/vehicles', vehiclesRouter);
 app.use('/api/products', productsRouter);
+app.use('/api/uploads', uploadsRouter);
 app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/payments', paymentsRouter);
 app.use('/api/garage', garageRouter);

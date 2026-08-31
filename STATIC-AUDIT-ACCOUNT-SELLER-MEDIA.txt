@@ -1,0 +1,33 @@
+SANDMAN ACCOUNT / SELLER / MEDIA STATIC AUDIT
+==============================================
+
+RESULT: PASS after post-scan fixes.
+See POST-SCAN-AUDIT-V2.2.txt for the complete findings, fixes and remaining integration risks.
+
+Core checks:
+- Storefront/admin JavaScript syntax: PASS
+- HTML parser / duplicate static ID scan: PASS
+- CSS structural scan: PASS
+- Strict-CSP inline-script scan: PASS
+- Upload router + Cloudinary CSP connection: PASS
+- Cloudinary secret remains server-only: PASS
+- Admin catalogue upload role guard: PASS
+- Marketplace upload authentication: PASS
+- HTTPS image URL validation: PASS
+- Seller draft-before-payout behavior: PASS
+- Publishing still requires payout verification: PASS
+- Seller fitment verification metadata preservation: PASS
+- Seller shipping destination display: PASS
+- Profile PATCH / phone persistence path: PASS
+- Light mode default: PASS
+
+No Prisma migration is required because existing models/fields are reused.
+
+Dependency-backed local verification is still mandatory before pushing:
+node --check public\store\app.js
+node --check public\admin\app.js
+npx prisma validate
+npm run typecheck
+npm test
+npm run build
+git diff --check

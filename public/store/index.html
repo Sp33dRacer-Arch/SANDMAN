@@ -1,15 +1,9 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#070707" />
-  <script>
-    (() => {
-      try { document.documentElement.dataset.theme = localStorage.getItem('sandman-theme') === 'light' ? 'light' : 'dark'; }
-      catch { document.documentElement.dataset.theme = 'dark'; }
-    })();
-  </script>
+  <meta name="theme-color" content="#f5f1e8" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
   <meta name="description" content="SANDMAN — a marketplace for engine parts. Buy supplier-stocked parts and list your own." />
   <title>SANDMAN — Engine Parts Marketplace</title>
@@ -48,8 +42,8 @@
       <button class="icon-btn" id="searchToggle" aria-label="Search" title="Search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
       </button>
-      <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
-        <span class="theme-icon" aria-hidden="true">☼</span>
+      <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode">
+        <span class="theme-icon" aria-hidden="true">☾</span>
       </button>
       <button class="icon-btn notification-btn" id="notificationButton" aria-label="Notifications" title="Notifications">
         <span aria-hidden="true">◌</span><span class="notification-dot" id="notificationDot" hidden></span>
@@ -77,8 +71,8 @@
       <div class="mobile-menu-group"><span class="mobile-menu-label">SHOP</span><a href="#/shop">Shop all</a><a href="#/shop?source=MARKETPLACE">Marketplace</a><a href="#/wishlist">Wishlist</a></div>
       <div class="mobile-menu-group"><span class="mobile-menu-label">VEHICLE</span><a href="#/vehicle-finder">Vehicle finder</a><a href="#/garage">My Garage</a><a href="#/requests">Request a part</a></div>
       <div class="mobile-menu-group"><span class="mobile-menu-label">BUILD</span><a href="#/advisor">Build advisor</a><a href="#/builds">My builds</a></div>
-      <div class="mobile-menu-group"><span class="mobile-menu-label">ACCOUNT</span><a href="#/messages">Messages</a><a href="#/sell">Sell a part</a><a href="#/seller">Seller dashboard</a><a href="/admin">Admin</a></div>
-      <button class="mobile-theme-toggle" data-theme-toggle type="button"><span class="theme-icon" aria-hidden="true">☼</span><span class="theme-label">Light mode</span></button>
+      <div class="mobile-menu-group"><span class="mobile-menu-label">ACCOUNT</span><a href="#/account">My profile</a><a href="#/account?tab=purchases">Purchases</a><a href="#/account?tab=sales">Sales</a><a href="#/messages">Messages</a><a href="#/sell">Sell a part</a><a href="#/seller">Seller studio</a><a href="/admin">Admin</a></div>
+      <button class="mobile-theme-toggle" data-theme-toggle type="button"><span class="theme-icon" aria-hidden="true">☾</span><span class="theme-label">Dark mode</span></button>
     </nav>
   </aside>
 

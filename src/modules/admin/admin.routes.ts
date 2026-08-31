@@ -37,6 +37,7 @@ adminRouter.get('/settings', asyncHandler(async (_req, res) => {
       paypal: Boolean(env.PAYPAL_CLIENT_ID && env.PAYPAL_CLIENT_SECRET),
       bankTransfer: Boolean(env.BANK_TRANSFER_INSTRUCTIONS),
     },
+    imageUploads: { cloudinary: Boolean(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) },
     marketplace: {
       commissionPercent: env.MARKETPLACE_COMMISSION_PERCENT,
       payoutProvider: 'Stripe Connect',
@@ -234,7 +235,7 @@ const productSchema = z.object({
   seoTitle: z.string().max(160).optional(),
   seoDescription: z.string().max(320).optional(),
   status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).default('DRAFT'),
-  images: z.array(z.object({ url: z.string().url(), alt: z.string().optional(), position: z.number().int().default(0) })).default([]),
+  images: z.array(z.object({ url: z.string().url().refine(value => value.startsWith('https://'), 'Image URL must use HTTPS'), alt: z.string().max(240).optional(), position: z.number().int().min(0).max(20).default(0) })).max(8).default([]),
 });
 
 adminRouter.post('/products', asyncHandler(async (req, res) => {
@@ -251,8 +252,17 @@ adminRouter.post('/products', asyncHandler(async (req, res) => {
 }));
 
 adminRouter.patch('/products/:id', asyncHandler(async (req, res) => {
-  const data = productSchema.omit({ images: true }).partial().parse(req.body);
-  const product = await prisma.product.update({ where: { id: routeParam(req.params.id, 'id') }, data });
+  const data = productSchema.partial().parse(req.body);
+  const id = routeParam(req.params.id, 'id');
+  const { images, ...productData } = data;
+  const product = await prisma.$transaction(async tx => {
+    await tx.product.update({ where: { id }, data: productData });
+    if (images) {
+      await tx.productImage.deleteMany({ where: { productId: id } });
+      if (images.length) await tx.productImage.createMany({ data: images.map(image => ({ ...image, productId: id })) });
+    }
+    return tx.product.findUnique({ where: { id }, include: { images: { orderBy: { position: 'asc' } }, category: true } });
+  });
   res.json(product);
 }));
 
