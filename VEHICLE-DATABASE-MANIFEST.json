@@ -1,0 +1,12 @@
+{
+  "name": "SANDMAN Vehicle Database V1",
+  "curatedModelRanges": 355,
+  "curatedExpandedRows1996To2027": 7014,
+  "nhtsaImporter": true,
+  "defaultNhtsaMinYear": 1996,
+  "notes": [
+    "Dynamic VehicleVariant schema detection",
+    "No Prisma schema or migration changes",
+    "Fitment remains separate from catalogue"
+  ]
+}

@@ -1,0 +1,2494 @@
+{
+  "version": 1,
+  "records": [
+    {
+      "make": "BMW",
+      "model": "1 Series",
+      "yearFrom": 2004,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "2 Series",
+      "yearFrom": 2014,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "3 Series",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "4 Series",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "5 Series",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "6 Series",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "7 Series",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "8 Series",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "X1",
+      "yearFrom": 2009,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "X2",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "X3",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "X4",
+      "yearFrom": 2014,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "X5",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "X6",
+      "yearFrom": 2008,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "X7",
+      "yearFrom": 2019,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "Z4",
+      "yearFrom": 2002,
+      "yearTo": 2016,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "Z4",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "yearFrom": 2011,
+      "yearTo": 2016,
+      "source": "SANDMAN_CURATED",
+      "model": "M135i",
+      "engine": "N55"
+    },
+    {
+      "make": "BMW",
+      "yearFrom": 2016,
+      "yearTo": 2019,
+      "source": "SANDMAN_CURATED",
+      "model": "M140i",
+      "engine": "B58"
+    },
+    {
+      "make": "BMW",
+      "yearFrom": 2014,
+      "yearTo": 2021,
+      "source": "SANDMAN_CURATED",
+      "model": "M235i",
+      "engine": "N55/B58"
+    },
+    {
+      "make": "BMW",
+      "yearFrom": 2016,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED",
+      "model": "M240i",
+      "engine": "B58"
+    },
+    {
+      "make": "BMW",
+      "model": "M2",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "M3",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "M4",
+      "yearFrom": 2014,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "M5",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "M6",
+      "yearFrom": 2005,
+      "yearTo": 2018,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "M8",
+      "yearFrom": 2019,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "335i",
+      "yearFrom": 2006,
+      "yearTo": 2013,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "340i",
+      "yearFrom": 2012,
+      "yearTo": 2019,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "320i",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "325i",
+      "yearFrom": 2005,
+      "yearTo": 2013,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BMW",
+      "model": "330i",
+      "yearFrom": 2005,
+      "yearTo": 2016,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "A-Class",
+      "yearFrom": 1997,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "CLA",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "C-Class",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "E-Class",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "S-Class",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "CLS",
+      "yearFrom": 2004,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "GLA",
+      "yearFrom": 2014,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "GLB",
+      "yearFrom": 2019,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "GLC",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "GLE",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "GLS",
+      "yearFrom": 2016,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "G-Class",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "SLK",
+      "yearFrom": 1996,
+      "yearTo": 2020,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-Benz",
+      "model": "SL",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "A35",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "A45",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "CLA35",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "CLA45",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "C43",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "C55",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "C63",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "E53",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "E55",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "E63",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "S63",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "GT",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "GLC43",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "GLC63",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "GLE53",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mercedes-AMG",
+      "model": "GLE63",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "A1",
+      "yearFrom": 2010,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "A3",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "A4",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "A6",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "A8",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "A5",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "Q2",
+      "yearFrom": 2016,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "Q3",
+      "yearFrom": 2011,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "Q5",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "Q7",
+      "yearFrom": 2006,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "Q8",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "TT",
+      "yearFrom": 1998,
+      "yearTo": 2023,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "R8",
+      "yearFrom": 2007,
+      "yearTo": 2024,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "S3",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "S4",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "S5",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "S6",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "S7",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "S8",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "RS3",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "RS4",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "RS5",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "RS6",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "RS7",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "RS Q3",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Audi",
+      "model": "RS Q8",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Golf",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Polo",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Passat",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Jetta",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Tiguan",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "T-Roc",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Touareg",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Amarok",
+      "yearFrom": 2010,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Golf GTI",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Golf R",
+      "yearFrom": 2002,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volkswagen",
+      "model": "Polo GTI",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "Corolla",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "Camry",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "RAV4",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "Hilux",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "Land Cruiser",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "Prado",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "Fortuner",
+      "yearFrom": 2005,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "Yaris",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "86",
+      "yearFrom": 2012,
+      "yearTo": 2021,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "GR86",
+      "yearFrom": 2022,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "GR Yaris",
+      "yearFrom": 2020,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "GR Corolla",
+      "yearFrom": 2023,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "Supra",
+      "yearFrom": 1996,
+      "yearTo": 2002,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "GR Supra",
+      "yearFrom": 2019,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "MR2",
+      "yearFrom": 1996,
+      "yearTo": 2007,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Toyota",
+      "model": "HiAce",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Fiesta",
+      "yearFrom": 1996,
+      "yearTo": 2023,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Focus",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Ranger",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Mustang",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Everest",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Kuga",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Puma",
+      "yearFrom": 2020,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Fiesta ST",
+      "yearFrom": 2013,
+      "yearTo": 2018,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Focus ST",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Focus RS",
+      "yearFrom": 2016,
+      "yearTo": 2018,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ford",
+      "model": "Ranger Raptor",
+      "yearFrom": 2016,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "Micra",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "Patrol",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "Qashqai",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "X-Trail",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "Navara",
+      "yearFrom": 1997,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "350Z",
+      "yearFrom": 2003,
+      "yearTo": 2009,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "370Z",
+      "yearFrom": 2009,
+      "yearTo": 2020,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "Z",
+      "yearFrom": 2023,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "GT-R",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Nissan",
+      "model": "Skyline GT-R",
+      "yearFrom": 1996,
+      "yearTo": 2002,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "Civic",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "Accord",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "CR-V",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "HR-V",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "Jazz",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "Fit",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "S2000",
+      "yearFrom": 1999,
+      "yearTo": 2009,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "Civic Type R",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Honda",
+      "model": "NSX",
+      "yearFrom": 2016,
+      "yearTo": 2022,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "Mazda2",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "Mazda3",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "Mazda6",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "MX-5",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "CX-5",
+      "yearFrom": 2012,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "CX-3",
+      "yearFrom": 2016,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "CX-30",
+      "yearFrom": 2019,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "CX-60",
+      "yearFrom": 2022,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mazda",
+      "model": "RX-8",
+      "yearFrom": 2003,
+      "yearTo": 2012,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "Impreza",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "Forester",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "Outback",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "Legacy",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "BRZ",
+      "yearFrom": 2012,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "WRX",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "WRX STI",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "XV",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Subaru",
+      "model": "Crosstrek",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mitsubishi",
+      "model": "Pajero",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mitsubishi",
+      "model": "Triton",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mitsubishi",
+      "model": "Lancer",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mitsubishi",
+      "model": "Lancer Evolution",
+      "yearFrom": 1996,
+      "yearTo": 2016,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mitsubishi",
+      "model": "ASX",
+      "yearFrom": 2010,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mitsubishi",
+      "model": "Outlander",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "Elantra",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "Sonata",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "Tucson",
+      "yearFrom": 2004,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "Santa Fe",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "i20",
+      "yearFrom": 2011,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "i30",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "Kona",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "i30 N",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Hyundai",
+      "model": "i20 N",
+      "yearFrom": 2021,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Kia",
+      "model": "Picanto",
+      "yearFrom": 2004,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Kia",
+      "model": "Sportage",
+      "yearFrom": 2004,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Kia",
+      "model": "Sorento",
+      "yearFrom": 2002,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Kia",
+      "model": "Ceed",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Kia",
+      "model": "Seltos",
+      "yearFrom": 2019,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Kia",
+      "model": "Stinger",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Kia",
+      "model": "EV6",
+      "yearFrom": 2021,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Renault",
+      "model": "Clio",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Renault",
+      "model": "Megane",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Renault",
+      "model": "Koleos",
+      "yearFrom": 2008,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Renault",
+      "model": "Captur",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Renault",
+      "model": "Kadjar",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Renault",
+      "model": "Clio RS",
+      "yearFrom": 1999,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Renault",
+      "model": "Megane RS",
+      "yearFrom": 2004,
+      "yearTo": 2021,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "206",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "207",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "208",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "307",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "308",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "407",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "508",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "3008",
+      "yearFrom": 2009,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Peugeot",
+      "model": "5008",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Citroen",
+      "model": "C1",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Citroen",
+      "model": "C2",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Citroen",
+      "model": "C3",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Citroen",
+      "model": "C4",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Citroen",
+      "model": "C5",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Citroen",
+      "model": "C3 Aircross",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Citroen",
+      "model": "C5 Aircross",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Opel",
+      "model": "Corsa",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Opel",
+      "model": "Astra",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Opel",
+      "model": "Insignia",
+      "yearFrom": 2008,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Opel",
+      "model": "Crossland",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Opel",
+      "model": "Mokka",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "S40",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "S60",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "S80",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "S90",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "V40",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "V60",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "V90",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "XC90",
+      "yearFrom": 2002,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "XC60",
+      "yearFrom": 2008,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Volvo",
+      "model": "XC40",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "IS",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "ES",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "GS",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "LS",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "RX",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "LX",
+      "yearFrom": 1998,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "NX",
+      "yearFrom": 2014,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "RC",
+      "yearFrom": 2014,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "LC",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "IS F",
+      "yearFrom": 2008,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lexus",
+      "model": "RC F",
+      "yearFrom": 2008,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Land Rover",
+      "model": "Defender",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Land Rover",
+      "model": "Discovery",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Land Rover",
+      "model": "Range Rover",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Land Rover",
+      "model": "Range Rover Sport",
+      "yearFrom": 2005,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Land Rover",
+      "model": "Range Rover Evoque",
+      "yearFrom": 2011,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Land Rover",
+      "model": "Range Rover Velar",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Land Rover",
+      "model": "Discovery Sport",
+      "yearFrom": 2014,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaguar",
+      "model": "XJ",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaguar",
+      "model": "XK",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaguar",
+      "model": "X-Type",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaguar",
+      "model": "XF",
+      "yearFrom": 2008,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaguar",
+      "model": "XE",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaguar",
+      "model": "F-Pace",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaguar",
+      "model": "F-Type",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaguar",
+      "model": "I-Pace",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "911",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "Boxster",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "Cayman",
+      "yearFrom": 2006,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "Cayenne",
+      "yearFrom": 2003,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "Panamera",
+      "yearFrom": 2010,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "Macan",
+      "yearFrom": 2014,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "Taycan",
+      "yearFrom": 2020,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "911 Turbo",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Porsche",
+      "model": "911 GT3",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "F355",
+      "yearFrom": 1996,
+      "yearTo": 1999,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "360 Modena",
+      "yearFrom": 1999,
+      "yearTo": 2005,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "F430",
+      "yearFrom": 2004,
+      "yearTo": 2009,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "458 Italia",
+      "yearFrom": 2009,
+      "yearTo": 2015,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "488 GTB",
+      "yearFrom": 2015,
+      "yearTo": 2019,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "F8 Tributo",
+      "yearFrom": 2019,
+      "yearTo": 2024,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "Roma",
+      "yearFrom": 2020,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "296 GTB",
+      "yearFrom": 2022,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "812 Superfast",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "FF",
+      "yearFrom": 2011,
+      "yearTo": 2020,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "GTC4Lusso",
+      "yearFrom": 2011,
+      "yearTo": 2020,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "Purosangue",
+      "yearFrom": 2023,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Ferrari",
+      "model": "LaFerrari",
+      "yearFrom": 2013,
+      "yearTo": 2018,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lamborghini",
+      "model": "Gallardo",
+      "yearFrom": 2003,
+      "yearTo": 2013,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lamborghini",
+      "model": "Huracan",
+      "yearFrom": 2014,
+      "yearTo": 2024,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lamborghini",
+      "model": "Aventador",
+      "yearFrom": 2011,
+      "yearTo": 2022,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lamborghini",
+      "model": "Urus",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Lamborghini",
+      "model": "Revuelto",
+      "yearFrom": 2024,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "McLaren",
+      "model": "MP4-12C",
+      "yearFrom": 2011,
+      "yearTo": 2014,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "McLaren",
+      "model": "650S",
+      "yearFrom": 2014,
+      "yearTo": 2021,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "McLaren",
+      "model": "720S",
+      "yearFrom": 2017,
+      "yearTo": 2024,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "McLaren",
+      "model": "570S",
+      "yearFrom": 2015,
+      "yearTo": 2021,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "McLaren",
+      "model": "Artura",
+      "yearFrom": 2021,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "McLaren",
+      "model": "750S",
+      "yearFrom": 2024,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Aston Martin",
+      "model": "DB7",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Aston Martin",
+      "model": "DB9",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Aston Martin",
+      "model": "DB11",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Aston Martin",
+      "model": "DB12",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Aston Martin",
+      "model": "Vantage",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Aston Martin",
+      "model": "Vanquish",
+      "yearFrom": 2001,
+      "yearTo": 2018,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Aston Martin",
+      "model": "DBX",
+      "yearFrom": 2020,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MINI",
+      "model": "Cooper",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MINI",
+      "model": "Cooper S",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MINI",
+      "model": "John Cooper Works",
+      "yearFrom": 2001,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MINI",
+      "model": "Countryman",
+      "yearFrom": 2010,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MINI",
+      "model": "Paceman",
+      "yearFrom": 2013,
+      "yearTo": 2024,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MINI",
+      "model": "Clubman",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jeep",
+      "model": "Wrangler",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jeep",
+      "model": "Grand Cherokee",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jeep",
+      "model": "Cherokee",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jeep",
+      "model": "Compass",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jeep",
+      "model": "Renegade",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jeep",
+      "model": "Gladiator",
+      "yearFrom": 2020,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Suzuki",
+      "model": "Swift",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Suzuki",
+      "model": "Jimny",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Suzuki",
+      "model": "Vitara",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Suzuki",
+      "model": "Baleno",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Suzuki",
+      "model": "Ertiga",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Suzuki",
+      "model": "Grand Vitara",
+      "yearFrom": 2022,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Isuzu",
+      "model": "D-Max",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Isuzu",
+      "model": "MU-X",
+      "yearFrom": 2013,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "GWM",
+      "model": "Steed",
+      "yearFrom": 2008,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "GWM",
+      "model": "P-Series",
+      "yearFrom": 2021,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "GWM",
+      "model": "P500",
+      "yearFrom": 2021,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Haval",
+      "model": "H1",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Haval",
+      "model": "H2",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Haval",
+      "model": "H6",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Haval",
+      "model": "H9",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Haval",
+      "model": "Jolion",
+      "yearFrom": 2022,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Chery",
+      "model": "Tiggo 4",
+      "yearFrom": 2010,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Chery",
+      "model": "Tiggo 7",
+      "yearFrom": 2010,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Chery",
+      "model": "Tiggo 8",
+      "yearFrom": 2010,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Omoda",
+      "model": "C5",
+      "yearFrom": 2023,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Jaecoo",
+      "model": "J7",
+      "yearFrom": 2024,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BYD",
+      "model": "Atto 3",
+      "yearFrom": 2022,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BYD",
+      "model": "Dolphin",
+      "yearFrom": 2022,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "BYD",
+      "model": "Seal",
+      "yearFrom": 2022,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MG",
+      "model": "MG3",
+      "yearFrom": 2011,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MG",
+      "model": "MG4",
+      "yearFrom": 2011,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MG",
+      "model": "ZS",
+      "yearFrom": 2011,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "MG",
+      "model": "HS",
+      "yearFrom": 2011,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mahindra",
+      "model": "Scorpio",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mahindra",
+      "model": "Pik Up",
+      "yearFrom": 2007,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mahindra",
+      "model": "XUV300",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Mahindra",
+      "model": "XUV700",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Alfa Romeo",
+      "model": "Giulietta",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Alfa Romeo",
+      "model": "Giulia",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Alfa Romeo",
+      "model": "Stelvio",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Fiat",
+      "model": "500",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Fiat",
+      "model": "Panda",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Fiat",
+      "model": "Punto",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Fiat",
+      "model": "Tipo",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Skoda",
+      "model": "Fabia",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Skoda",
+      "model": "Octavia",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Skoda",
+      "model": "Superb",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Skoda",
+      "model": "Yeti",
+      "yearFrom": 2009,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Skoda",
+      "model": "Kodiaq",
+      "yearFrom": 2009,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Skoda",
+      "model": "Karoq",
+      "yearFrom": 2009,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "SEAT",
+      "model": "Ibiza",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "SEAT",
+      "model": "Leon",
+      "yearFrom": 1996,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Cupra",
+      "model": "Leon",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Cupra",
+      "model": "Formentor",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Cupra",
+      "model": "Ateca",
+      "yearFrom": 2018,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Tesla",
+      "model": "Model S",
+      "yearFrom": 2012,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Tesla",
+      "model": "Model X",
+      "yearFrom": 2015,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Tesla",
+      "model": "Model 3",
+      "yearFrom": 2017,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    },
+    {
+      "make": "Tesla",
+      "model": "Model Y",
+      "yearFrom": 2020,
+      "yearTo": 2026,
+      "source": "SANDMAN_CURATED"
+    }
+  ]
+}
