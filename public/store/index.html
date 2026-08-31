@@ -4,6 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#070707" />
+  <script>
+    (() => {
+      try { document.documentElement.dataset.theme = localStorage.getItem('sandman-theme') === 'light' ? 'light' : 'dark'; }
+      catch { document.documentElement.dataset.theme = 'dark'; }
+    })();
+  </script>
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
   <meta name="description" content="SANDMAN — a marketplace for engine parts. Buy supplier-stocked parts and list your own." />
   <title>SANDMAN — Engine Parts Marketplace</title>
@@ -31,6 +37,9 @@
     <div class="header-actions">
       <button class="icon-btn" id="searchToggle" aria-label="Search" title="Search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
+      </button>
+      <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch to light mode" title="Switch to light mode">
+        <span class="theme-icon" aria-hidden="true">☼</span>
       </button>
       <button class="icon-btn notification-btn" id="notificationButton" aria-label="Notifications" title="Notifications">
         <span aria-hidden="true">◌</span><span class="notification-dot" id="notificationDot" hidden></span>
@@ -67,6 +76,7 @@
       <a href="#/messages">Messages</a>
       <a href="#/sell">Sell a part</a>
       <a href="#/seller">Seller dashboard</a>
+      <button class="mobile-theme-toggle" data-theme-toggle type="button"><span class="theme-icon" aria-hidden="true">☼</span><span class="theme-label">Light mode</span></button>
       <a href="/admin">Admin</a>
     </nav>
   </aside>

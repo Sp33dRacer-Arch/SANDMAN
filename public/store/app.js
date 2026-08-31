@@ -20,6 +20,29 @@
   const queryFromHash = () => { const raw = location.hash.replace(/^#\/?/, ''); const [path = '', query = ''] = raw.split('?'); return { path: path || '', params: new URLSearchParams(query) }; };
   const requireLogin = (copy = 'Log in to use this feature.') => { if (state.token) return true; openAuth('login'); toast(copy); return false; };
 
+  const THEME_KEY = 'sandman-theme';
+  function currentTheme() { return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'; }
+  function syncThemeUi() {
+    const light = currentTheme() === 'light';
+    $$('[data-theme-toggle]').forEach(button => {
+      const icon = button.querySelector('.theme-icon');
+      const label = button.querySelector('.theme-label');
+      if (icon) icon.textContent = light ? '☾' : '☼';
+      if (label) label.textContent = light ? 'Dark mode' : 'Light mode';
+      button.setAttribute('aria-label', light ? 'Switch to dark mode' : 'Switch to light mode');
+      button.title = light ? 'Switch to dark mode' : 'Switch to light mode';
+    });
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = light ? '#f5f1e8' : '#070707';
+  }
+  function setTheme(theme, persist = true) {
+    const next = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    if (persist) { try { localStorage.setItem(THEME_KEY, next); } catch {} }
+    syncThemeUi();
+  }
+  function toggleTheme() { setTheme(currentTheme() === 'light' ? 'dark' : 'light'); }
+
   async function refreshSession() {
     try {
       const res = await fetch('/api/auth/refresh', { method:'POST', credentials:'same-origin' });
@@ -270,6 +293,13 @@
 
   function bindGlobalUi(){window.addEventListener('scroll',()=>$('#siteHeader').classList.toggle('scrolled',scrollY>20),{passive:true});window.addEventListener('hashchange',route);$('#searchToggle').onclick=()=>{const p=$('#searchPanel');p.classList.toggle('open');p.setAttribute('aria-hidden',p.classList.contains('open')?'false':'true');if(p.classList.contains('open'))setTimeout(()=>$('#globalSearchInput').focus(),100);};$('#globalSearchForm').onsubmit=e=>{e.preventDefault();const q=$('#globalSearchInput').value.trim();$('#searchPanel').classList.remove('open');location.hash=`#/shop${q?`?q=${encodeURIComponent(q)}`:''}`;};$('#globalSearchInput').addEventListener('input',e=>{clearTimeout(state.searchTimer);const q=e.target.value.trim();if(!q){$('#searchSuggestions').innerHTML='';return;}state.searchTimer=setTimeout(async()=>{try{const d=await api(`/experience/search/suggestions?q=${encodeURIComponent(q)}`);$('#searchSuggestions').innerHTML=`${d.products.map(p=>`<a href="#/product/${encodeURIComponent(p.slug)}"><strong>${esc(p.name)}</strong><small>${esc(p.brand||p.sku)} · ${money(p.priceCents)}</small></a>`).join('')}${d.engines.map(v=>`<a href="#/shop?q=${encodeURIComponent(v.engineCode)}"><strong>${esc(v.engineCode)}</strong><small>${esc(`${v.model.make.name} ${v.model.name} · ${v.engineName}`)}</small></a>`).join('')}${d.brands.map(b=>`<a href="#/shop?q=${encodeURIComponent(b)}"><strong>${esc(b)}</strong><small>Brand</small></a>`).join('')}`;}catch{}},180);});$('#accountButton').onclick=()=>state.token?location.hash='#/account':openAuth('login');$('#mobileAccountButton').onclick=()=>state.token?location.hash='#/account':openAuth('login');$('#notificationButton').onclick=()=>state.token?location.hash='#/notifications':openAuth('login');$('#cartButton').onclick=openCart;$('#cartClose').onclick=closeCart;$('#authClose').onclick=closeAuth;$('#backdrop').onclick=()=>{closeCart();closeAuth();};$('#mobileMenuButton').onclick=()=>{$('#mobileMenu').classList.add('open');$('#mobileMenu').setAttribute('aria-hidden','false');};$('#mobileMenuClose').onclick=closeMobileMenu;$$('#mobileMenu a').forEach(a=>a.onclick=closeMobileMenu);$$('.auth-tabs button').forEach(b=>b.onclick=()=>switchAuthTab(b.dataset.authTab));$('#forgotPasswordButton').onclick=async()=>{const email=prompt('Email address:');if(!email)return;try{await api('/auth/forgot-password',{method:'POST',body:JSON.stringify({email})});toast('If that account exists, a reset email was sent.');}catch(e){toast(e.message,'error');}};$('#loginForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{let data=await api('/auth/login',{method:'POST',body:JSON.stringify({email:f.get('email'),password:f.get('password')})});if(data.requiresTwoFactor){const code=prompt('Enter your 6-digit authenticator code:');if(!code)return;data=await api('/auth/login/2fa',{method:'POST',body:JSON.stringify({challengeToken:data.challengeToken,code})});}setToken(data.token,data.user);await hydrateUser();closeAuth();toast(`Welcome back${data.user.firstName?`, ${data.user.firstName}`:''}`);route();}catch(err){toast(err.message,'error');}};$('#registerForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{const data=await api('/auth/register',{method:'POST',body:JSON.stringify({email:f.get('email'),password:f.get('password'),firstName:f.get('firstName'),lastName:f.get('lastName')})});setToken(data.token,data.user);await hydrateUser();closeAuth();toast('Account created — check your email to verify it');route();}catch(err){toast(err.message,'error');}};document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCart();closeAuth();closeMobileMenu();$('#searchPanel').classList.remove('open');}});document.addEventListener('click',e=>{if(e.target.closest('[data-compare-id]'))return;});}
 
-  async function boot(){bindGlobalUi();await Promise.all([loadCategories(),hydrateUser()]);updateCartCount();await route();}
+  async function boot(){
+    syncThemeUi();
+    $$('[data-theme-toggle]').forEach(button => button.addEventListener('click', toggleTheme));
+    bindGlobalUi();
+    await Promise.all([loadCategories(),hydrateUser()]);
+    updateCartCount();
+    await route();
+  }
   boot();
 })();

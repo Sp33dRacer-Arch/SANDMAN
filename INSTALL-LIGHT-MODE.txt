@@ -1,0 +1,55 @@
+SANDMAN V2.0 — LIGHT MODE PATCH
+================================
+
+WHAT THIS ADDS
+--------------
+- Light/dark toggle on the customer storefront header.
+- Light/dark toggle inside the mobile menu.
+- Light/dark toggle on the admin login screen and admin topbar.
+- Shared preference between storefront and admin.
+- Preference persists across refreshes using localStorage.
+- Dark mode remains the default until the user chooses Light mode.
+- No database migration is required.
+- No backend/API/checkout/fitment/payment logic is changed.
+
+INSTALL (PowerShell)
+--------------------
+1. Extract SANDMAN-V2.0-LIGHT-MODE-PATCH.zip in Downloads.
+
+2. From PowerShell, copy it into the existing backend:
+
+robocopy "$env:USERPROFILE\Downloads\SANDMAN-V2.0-LIGHT-MODE-PATCH" "$env:USERPROFILE\Downloads\SANDMAN-backend" /E /R:1 /W:1
+
+3. Enter the backend:
+
+cd "$env:USERPROFILE\Downloads\SANDMAN-backend"
+
+4. Verify the two browser JavaScript files:
+
+node --check public\store\app.js
+node --check public\admin\app.js
+
+5. Review the Git diff:
+
+git diff -- public\store public\admin
+
+6. Stage only the light-mode files:
+
+git add public\store\index.html public\store\app.js public\store\styles.css public\admin\index.html public\admin\app.js public\admin\styles.css
+
+7. Commit and push:
+
+git commit -m "Add SANDMAN light mode"
+git push origin main
+
+TEST AFTER RAILWAY DEPLOYS
+--------------------------
+- Hard refresh the storefront with Ctrl+F5.
+- Use the sun/moon button in the header.
+- Refresh the page: the selected theme should remain.
+- Open /admin: the same theme should carry across.
+- Toggle again in admin and return to the storefront: it should remain synchronized.
+
+ROLLBACK
+--------
+If needed, revert the Git commit instead of editing the production files manually.

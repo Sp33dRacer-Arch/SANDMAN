@@ -19,6 +19,29 @@
   const modalRoot = $('#modal-root');
   const toastRoot = $('#toast-root');
 
+  const THEME_KEY = 'sandman-theme';
+  function currentTheme() { return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark'; }
+  function syncThemeUi() {
+    const light = currentTheme() === 'light';
+    $$('[data-theme-toggle]').forEach(button => {
+      const icon = button.querySelector('.theme-icon');
+      const label = button.querySelector('.theme-label');
+      if (icon) icon.textContent = light ? '☾' : '☼';
+      if (label) label.textContent = light ? 'Dark mode' : 'Light mode';
+      button.setAttribute('aria-label', light ? 'Switch to dark mode' : 'Switch to light mode');
+      button.title = light ? 'Switch to dark mode' : 'Switch to light mode';
+    });
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.content = light ? '#f4f1e8' : '#0b0b0a';
+  }
+  function setTheme(theme, persist = true) {
+    const next = theme === 'light' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    if (persist) { try { localStorage.setItem(THEME_KEY, next); } catch {} }
+    syncThemeUi();
+  }
+  function toggleTheme() { setTheme(currentTheme() === 'light' ? 'dark' : 'light'); }
+
   function safeJson(value) {
     try { return value ? JSON.parse(value) : null; } catch { return null; }
   }
@@ -935,6 +958,8 @@
   });
 
   (async function boot() {
+    syncThemeUi();
+    $$('[data-theme-toggle]').forEach(button => button.addEventListener('click', toggleTheme));
     await checkApi();
     const valid = await validateSession();
     if (valid) enterApp();
