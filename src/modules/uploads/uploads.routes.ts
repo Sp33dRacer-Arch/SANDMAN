@@ -11,7 +11,7 @@ export const uploadsRouter = Router();
 uploadsRouter.use(rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false }));
 
 const purposeSchema = z.object({
-  purpose: z.enum(['catalogue', 'marketplace']).default('marketplace'),
+  purpose: z.enum(['catalogue', 'marketplace', 'reviews', 'returns']).default('marketplace'),
 });
 
 uploadsRouter.get('/status', requireAuth, asyncHandler(async (_req, res) => {
@@ -28,7 +28,7 @@ uploadsRouter.post('/signature', requireAuth, asyncHandler(async (req, res) => {
   }
 
   const timestamp = Math.floor(Date.now() / 1000);
-  const folder = purpose === 'catalogue' ? 'sandman/catalogue' : `sandman/marketplace/${req.auth!.userId}`;
+  const folder = purpose === 'catalogue' ? 'sandman/catalogue' : purpose === 'reviews' ? `sandman/reviews/${req.auth!.userId}` : purpose === 'returns' ? `sandman/returns/${req.auth!.userId}` : `sandman/marketplace/${req.auth!.userId}`;
   const publicId = `image-${Date.now()}-${randomBytes(6).toString('hex')}`;
   const stringToSign = `folder=${folder}&public_id=${publicId}&timestamp=${timestamp}${env.CLOUDINARY_API_SECRET}`;
   const signature = createHash('sha1').update(stringToSign).digest('hex');

@@ -6,6 +6,7 @@ import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 import { effectiveOfferUnitPrice } from '../../lib/offer-pricing';
+import { publicProduct } from '../../lib/public-product';
 
 export const cartRouter = Router();
 cartRouter.use(requireAuth);
@@ -35,7 +36,11 @@ async function getCart(userId: string) {
   });
   return {
     ...cart,
-    items: cart.items.map(item => ({ ...item, effectiveUnitPriceCents: effectivePrice(item) })),
+    items: cart.items.map(item => ({
+      ...item,
+      product: publicProduct(item.product),
+      effectiveUnitPriceCents: effectivePrice(item),
+    })),
   };
 }
 

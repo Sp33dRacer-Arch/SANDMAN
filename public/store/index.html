@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#f5f1e8" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
-  <meta name="description" content="SANDMAN — a marketplace for engine parts. Buy supplier-stocked parts and list your own." />
-  <title>SANDMAN — Engine Parts Marketplace</title>
+  <meta name="description" content="SANDMAN — vehicle-first automotive parts, verified fitment, supplier stock, marketplace sellers and builds." />
+  <title>SANDMAN — Automotive Parts Marketplace</title>
   <link rel="stylesheet" href="/store/styles.css" />
 </head>
 <body>
@@ -14,29 +14,29 @@
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
   <header class="site-header" id="siteHeader">
-    <a class="wordmark" href="#/" aria-label="SANDMAN home">
+    <a class="wordmark" href="/" aria-label="SANDMAN home">
       <span class="wordmark-eye">◉</span>
       <span>SANDMAN</span>
     </a>
     <nav class="desktop-nav" aria-label="Primary">
-      <a href="#/shop">Shop</a>
+      <a href="/shop">Shop</a>
       <details class="nav-dropdown">
         <summary>Vehicles</summary>
         <div class="nav-dropdown-menu">
-          <a href="#/vehicle-finder"><strong>Find my vehicle</strong><small>Choose make, model, year and exact variant.</small></a>
-          <a href="#/garage"><strong>My Garage</strong><small>Save cars and shop with fitment context.</small></a>
-          <a href="#/shop?source=DROPSHIP"><strong>Supplier stock</strong><small>Browse connected supplier inventory.</small></a>
-          <a href="#/requests"><strong>Request a part</strong><small>Ask SANDMAN to source a missing vehicle or part.</small></a>
+          <a href="/vehicles"><strong>Find my vehicle</strong><small>Choose make, model, year and exact variant.</small></a>
+          <a href="/garage"><strong>My Garage</strong><small>Save cars and shop with fitment context.</small></a>
+          <a href="/shop?source=DROPSHIP"><strong>Supplier stock</strong><small>Browse connected supplier inventory.</small></a>
+          <a href="/requests"><strong>Request a part</strong><small>Ask SANDMAN to source a missing vehicle or part.</small></a>
         </div>
       </details>
       <details class="nav-dropdown">
         <summary>Builds</summary>
         <div class="nav-dropdown-menu">
-          <a href="#/advisor"><strong>Build Advisor</strong><small>Plan Daily, Reliability, Street or Track upgrades.</small></a>
-          <a href="#/builds"><strong>My Builds</strong><small>Organise parts, budget and build targets.</small></a>
+          <a href="/build-advisor"><strong>Build Advisor</strong><small>Plan Daily, Reliability, Street or Track upgrades.</small></a>
+          <a href="/builds"><strong>My Builds</strong><small>Organise parts, budget and build targets.</small></a>
         </div>
       </details>
-      <a href="#/shop?source=MARKETPLACE">Marketplace</a>
+      <a href="/marketplace">Marketplace</a>
     </nav>
     <div class="header-actions">
       <button class="icon-btn" id="searchToggle" aria-label="Search" title="Search">
@@ -68,10 +68,10 @@
   <aside class="mobile-menu" id="mobileMenu" aria-hidden="true">
     <div class="mobile-menu-head"><span class="eyebrow">SANDMAN / MENU</span><button class="close-x" id="mobileMenuClose" aria-label="Close menu">×</button></div>
     <nav>
-      <div class="mobile-menu-group"><span class="mobile-menu-label">SHOP</span><a href="#/shop">Shop all</a><a href="#/shop?source=MARKETPLACE">Marketplace</a><a href="#/wishlist">Wishlist</a></div>
-      <div class="mobile-menu-group"><span class="mobile-menu-label">VEHICLE</span><a href="#/vehicle-finder">Vehicle finder</a><a href="#/garage">My Garage</a><a href="#/requests">Request a part</a></div>
-      <div class="mobile-menu-group"><span class="mobile-menu-label">BUILD</span><a href="#/advisor">Build advisor</a><a href="#/builds">My builds</a></div>
-      <div class="mobile-menu-group"><span class="mobile-menu-label">ACCOUNT</span><a href="#/account">My profile</a><a href="#/account?tab=purchases">Purchases</a><a href="#/account?tab=sales">Sales</a><a href="#/messages">Messages</a><a href="#/sell">Sell a part</a><a href="#/seller">Seller studio</a><a href="/admin">Admin</a></div>
+      <div class="mobile-menu-group"><span class="mobile-menu-label">SHOP</span><a href="/shop">Shop all</a><a href="/marketplace">Marketplace</a><a href="/wishlist">Wishlist</a></div>
+      <div class="mobile-menu-group"><span class="mobile-menu-label">VEHICLE</span><a href="/vehicles">Vehicle finder</a><a href="/garage">My Garage</a><a href="/requests">Request a part</a></div>
+      <div class="mobile-menu-group"><span class="mobile-menu-label">BUILD</span><a href="/build-advisor">Build advisor</a><a href="/builds">My builds</a></div>
+      <div class="mobile-menu-group"><span class="mobile-menu-label">ACCOUNT</span><a href="/account">My profile</a><a href="/account?tab=purchases">Purchases</a><a href="/account?tab=sales">Sales</a><a href="/messages">Messages</a><a href="/sell">Sell a part</a><a href="/seller">Seller studio</a><a href="/admin">Admin</a></div>
       <button class="mobile-theme-toggle" data-theme-toggle type="button"><span class="theme-icon" aria-hidden="true">☾</span><span class="theme-label">Dark mode</span></button>
     </nav>
   </aside>
@@ -84,9 +84,9 @@
       <p>Verified fitment. Supplier stock. Builds. Independent sellers. One automotive platform.</p>
     </div>
     <div class="footer-links">
-      <div><span>MARKET</span><a href="#/shop">Shop all</a><a href="#/shop?source=DROPSHIP">Supplier stock</a><a href="#/shop?source=MARKETPLACE">Seller listings</a></div>
-      <div><span>SELL</span><a href="#/sell">List a part</a><a href="#/seller">Seller dashboard</a><a href="#/account">Account</a></div>
-      <div><span>SANDMAN</span><a href="#/buyer-protection">Buyer protection</a><a href="#/shipping">Shipping</a><a href="#/returns">Returns</a><a href="#/terms">Terms</a><a href="#/privacy">Privacy</a><a href="#/about">About</a></div>
+      <div><span>MARKET</span><a href="/shop">Shop all</a><a href="/shop?source=DROPSHIP">Supplier stock</a><a href="/marketplace">Seller listings</a></div>
+      <div><span>SELL</span><a href="/sell">List a part</a><a href="/seller">Seller dashboard</a><a href="/account">Account</a></div>
+      <div><span>SANDMAN</span><a href="/buyer-protection">Buyer protection</a><a href="/shipping">Shipping</a><a href="/returns">Returns</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/about">About</a></div>
     </div>
     <div class="footer-bottom"><span>© 2026 SANDMAN</span><span>DREAM WHILE AWAKE</span></div>
   </footer>
@@ -119,8 +119,13 @@
     </div>
   </section>
 
+  <section class="modal action-modal" id="actionModal" aria-hidden="true" aria-modal="true" role="dialog" aria-labelledby="actionModalTitle">
+    <button class="close-x modal-close" id="actionModalClose" aria-label="Close">×</button>
+    <div id="actionModalContent" class="action-modal-content"></div>
+  </section>
+
   <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
-    <a href="#/">Home</a><a href="#/shop">Shop</a><a href="#/vehicle-finder">Vehicle</a><a href="#/garage">Garage</a><button id="mobileAccountButton" type="button">Account</button>
+    <a href="/">Home</a><a href="/shop">Shop</a><a href="/vehicles">Vehicle</a><a href="/garage">Garage</a><button id="mobileAccountButton" type="button">Account</button>
   </nav>
 
   <script src="/store/app.js" defer></script>

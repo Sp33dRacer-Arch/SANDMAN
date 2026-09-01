@@ -18,6 +18,7 @@ import { rollbackUninitializedCheckout } from '../../services/order-lifecycle.se
 import { reservePromoUse } from '../../services/promo.service';
 import { reserveSupplierInventory } from '../../services/supplier-inventory.service';
 import { effectiveOfferUnitPrice } from '../../lib/offer-pricing';
+import { trackingUrlFor } from '../../services/shipping.service';
 
 export const ordersRouter = Router();
 ordersRouter.use(requireAuth);
@@ -136,6 +137,70 @@ function totalsForCart(cart: Awaited<ReturnType<typeof loadCheckoutCart>>, disco
   });
   const shippingCents = base.shippingCents + sellerShippingCents;
   return { ...base, shippingCents, totalCents: base.totalCents + sellerShippingCents };
+}
+
+function publicOrder(order: any) {
+  const {
+    internalNote: _internalNote,
+    stripePaymentIntentId: _stripePaymentIntentId,
+    paypalOrderId: _paypalOrderId,
+    marketplaceStockReleasedAt: _marketplaceStockReleasedAt,
+    refundInProgressAt: _refundInProgressAt,
+    refundInProgressCaseId: _refundInProgressCaseId,
+    items,
+    fulfillments,
+    events,
+    ...safeOrder
+  } = order;
+
+  const safeItems = Array.isArray(items) ? items.map(item => {
+    const {
+      offerId: _offerId,
+      supplierId: _supplierId,
+      supplierProductId: _supplierProductId,
+      supplierLinkId: _supplierLinkId,
+      supplierStockReservedAt: _supplierStockReservedAt,
+      supplierStockReleasedAt: _supplierStockReleasedAt,
+      supplierStockCommittedAt: _supplierStockCommittedAt,
+      supplierCostCents: _supplierCostCents,
+      platformFeeCents: _platformFeeCents,
+      sellerPayoutCents: _sellerPayoutCents,
+      ...safeItem
+    } = item;
+    return {
+      ...safeItem,
+      sellerTrackingUrl: trackingUrlFor(safeItem.sellerCarrier, safeItem.sellerTrackingNumber),
+    };
+  }) : undefined;
+
+  const safeFulfillments = Array.isArray(fulfillments) ? fulfillments.map(fulfillment => {
+    const {
+      orderId: _orderId,
+      supplierId: _supplierId,
+      supplierOrderId: _supplierOrderId,
+      errorMessage: _errorMessage,
+      rawResponse: _rawResponse,
+      ...safeFulfillment
+    } = fulfillment;
+    return {
+      ...safeFulfillment,
+      trackingUrl: safeFulfillment.trackingUrl || trackingUrlFor(safeFulfillment.carrier, safeFulfillment.trackingNumber),
+    };
+  }) : undefined;
+
+  const safeEvents = Array.isArray(events) ? events.map(event => ({
+    id: event.id,
+    type: event.type,
+    message: event.message,
+    createdAt: event.createdAt,
+  })) : undefined;
+
+  return {
+    ...safeOrder,
+    ...(safeItems ? { items: safeItems } : {}),
+    ...(safeFulfillments ? { fulfillments: safeFulfillments } : {}),
+    ...(safeEvents ? { events: safeEvents } : {}),
+  };
 }
 
 ordersRouter.post('/quote', asyncHandler(async (req, res) => {
@@ -287,7 +352,7 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
     if (body.paymentProvider === 'bank_transfer') {
       await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
       return res.status(201).json({
-        order,
+        order: publicOrder(order),
         payment: { provider: 'bank_transfer', status: 'pending', instructions: env.BANK_TRANSFER_INSTRUCTIONS },
       });
     }
@@ -304,7 +369,7 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
         prisma.cartItem.deleteMany({ where: { cartId: cart.id } }),
       ]);
       return res.status(201).json({
-        order: { ...order, paypalOrderId: paypalOrder.id },
+        order: publicOrder(order),
         payment: { provider: 'paypal', paypalOrderId: paypalOrder.id },
       });
     }
@@ -329,7 +394,7 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
     ]);
 
     return res.status(201).json({
-      order: { ...order, stripePaymentIntentId: paymentIntent.id },
+      order: publicOrder(order),
       payment: { provider: 'stripe', clientSecret: paymentIntent.client_secret, publishableKey: env.STRIPE_PUBLISHABLE_KEY },
     });
   } catch (error) {
@@ -347,7 +412,7 @@ ordersRouter.post('/:orderNumber/paypal/capture', asyncHandler(async (req, res) 
   });
   if (!order) throw new HttpError(404, 'Order not found');
   if (!order.paypalOrderId) throw new HttpError(409, 'This order does not have a PayPal payment');
-  if (order.paymentStatus === 'PAID') return res.json({ success: true, alreadyPaid: true, order });
+  if (order.paymentStatus === 'PAID') return res.json({ success: true, alreadyPaid: true, order: publicOrder(order) });
   if (order.status === 'CANCELLED' || order.marketplaceStockReleasedAt) {
     throw new HttpError(409, 'This checkout was cancelled. Create a new order instead of capturing the old PayPal session.');
   }
@@ -367,7 +432,7 @@ ordersRouter.post('/:orderNumber/paypal/capture', asyncHandler(async (req, res) 
 
   await finalizePaidOrder({ orderId: order.id, provider: 'paypal', message: 'PayPal payment captured successfully' });
   const updated = await prisma.order.findUnique({ where: { id: order.id }, include: { items: true, fulfillments: true } });
-  res.json({ success: true, order: updated });
+  res.json({ success: true, order: updated ? publicOrder(updated) : null });
 }));
 
 ordersRouter.get('/', asyncHandler(async (req, res) => {
@@ -376,7 +441,7 @@ ordersRouter.get('/', asyncHandler(async (req, res) => {
     include: { items: true, fulfillments: true },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(orders);
+  res.json(orders.map(publicOrder));
 }));
 
 ordersRouter.get('/:orderNumber', asyncHandler(async (req, res) => {
@@ -385,5 +450,5 @@ ordersRouter.get('/:orderNumber', asyncHandler(async (req, res) => {
     include: { items: true, fulfillments: true, events: { orderBy: { createdAt: 'desc' } } },
   });
   if (!order) throw new HttpError(404, 'Order not found');
-  res.json(order);
+  res.json(publicOrder(order));
 }));

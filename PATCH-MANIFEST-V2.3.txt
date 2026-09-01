@@ -1,0 +1,40 @@
+SANDMAN V2.3 FIXED UPGRADE PATCH MANIFEST
+Date: 2026-09-01
+
+Files changed or added vs V2.2:
+- CHANGELOG-V2.3.md
+- INSTALL-V2.3.txt
+- README.md
+- STATIC-AUDIT-V2.3-FINAL.txt
+- VERIFY-V2.3.ps1
+- package.json
+- public/admin/app.js
+- public/admin/index.html
+- public/admin/styles.css
+- public/store/app.js
+- public/store/index.html
+- public/store/styles.css
+- src/app.ts
+- src/config/env.ts
+- src/lib/media-url.ts
+- src/lib/public-product.ts
+- src/modules/admin/admin.routes.ts
+- src/modules/builds/builds.routes.ts
+- src/modules/cart/cart.routes.ts
+- src/modules/community/community.routes.ts
+- src/modules/experience/experience.routes.ts
+- src/modules/marketplace/marketplace.routes.ts
+- src/modules/orders/orders.routes.ts
+- src/modules/products/products.routes.ts
+- src/modules/reviews/reviews.routes.ts
+- src/modules/support/support.routes.ts
+- src/modules/uploads/uploads.routes.ts
+- src/modules/v2/v2.routes.ts
+- src/modules/vehicles/vehicles.routes.ts
+- src/services/search-ranking.service.ts
+- src/services/shipping.service.ts
+- src/services/stripe.service.ts
+- src/services/vin.service.ts
+- tests/search-ranking.test.ts
+- tests/shipping.test.ts
+- tests/vin-score.test.ts

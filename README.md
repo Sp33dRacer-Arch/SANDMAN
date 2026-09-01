@@ -1,11 +1,19 @@
-# SANDMAN V2.0
+# SANDMAN V2.3
 
 SANDMAN is a custom automotive-parts commerce platform: storefront, marketplace, My Garage, exact vehicle fitment, builds, supplier routing, checkout, payments, reviews, support and admin operations.
 
-V2.0 moves the product further away from a generic ecommerce store and makes the **vehicle itself** a first-class part of search, shopping, sourcing and build planning.
+V2.3 keeps the vehicle as a first-class part of shopping and adds a growth/trust layer: clean public URLs, VIN-assisted vehicle resolution, ranked search, delivery estimates and tracking, seller reputation, verified photo reviews, returns/buyer-protection workflows, and stronger Garage personalization.
 
-## V2.0 highlights
+## V2.3 highlights
 
+- Clean History API storefront URLs, product canonical/OG metadata, `robots.txt`, and dynamic product `sitemap.xml`.
+- VIN-assisted Garage lookup using NHTSA vPIC, with conservative SANDMAN catalogue matching and explicit customer confirmation.
+- Ranked search that prioritizes exact SKU/MPN/name matches before broad text matches.
+- Product delivery estimates plus carrier-aware tracking links on customer orders.
+- Seller reputation summaries with verified, top-seller and experience badges based on transaction/review evidence; seller response time is shown only as a self-declared response goal, not a performance badge.
+- Verified-purchase reviews with up to 5 photos and purchase-vehicle context.
+- Returns Center with order/item selection, evidence uploads and existing buyer-protection/refund operations.
+- Primary Garage vehicle prompts that personalize shopping without silently hiding unrelated inventory.
 - Step-by-step Vehicle Finder: make → model → year → engine/variant.
 - Verified fitment evidence on `ProductFitment` with source and verification timestamp.
 - Safer fitment semantics: missing catalogue evidence is **unconfirmed**, not automatically “does not fit”.
@@ -25,6 +33,8 @@ V2.0 moves the product further away from a generic ecommerce store and makes the
 V2 endpoints are mounted under `/api/v2`.
 
 - `GET /api/v2/catalog/status`
+- `POST /api/v2/vin/decode`
+- `GET /api/v2/shipping-estimate/:productId`
 - `GET /api/v2/vehicles/picker`
 - `GET /api/v2/vehicles/resolve`
 - `GET /api/v2/search`
@@ -69,14 +79,14 @@ npm run build
 Or run:
 
 ```powershell
-.\VERIFY-V2.0.ps1
+.\VERIFY-V2.3.ps1
 ```
 
 Never commit `.env`.
 
 ## Database migration
 
-V2.0 includes:
+V2.3 adds **no new Prisma schema or migration**. It reuses the existing V2.2/V2.0 data model. The latest automotive-core migration already present is:
 
 `prisma/migrations/20260831110000_v20_vehicle_fitment_requests/migration.sql`
 
@@ -97,7 +107,7 @@ Recommended service commands:
 - Start: `node dist/src/server.js`
 - Health: `/api/health`
 
-After the V2 migration is successfully deployed, the vehicle catalogue can be populated **inside the Railway service environment**. Start with BMW only:
+After the existing V2 migration chain is successfully deployed, the vehicle catalogue can be populated **inside the Railway service environment**. Start with BMW only:
 
 ```bash
 node scripts/sync-vehicle-catalog.mjs --source=curated --only-make=BMW --from=1996 --to=2027
@@ -108,7 +118,7 @@ Only expand to the full catalogue after the BMW smoke test succeeds.
 
 ## Still external / later-stage work
 
-V2.0 does not pretend to include services that require external providers or validated engineering data. You still need real supplier/API credentials, Stripe/PayPal configuration, outbound email, image/object storage and operational/legal setup. VIN decoding, a generative AI mechanic, OEM diagrams and 3D engineering simulation are intentionally later phases.
+V2.3 still does not pretend to include services that require external providers or validated engineering data. You still need real supplier/API credentials, Stripe/PayPal configuration, outbound email, Cloudinary/object storage and operational/legal setup. NHTSA VIN decoding is assistive only and never replaces SANDMAN fitment evidence. A generative AI mechanic, OEM diagram licensing and 3D engineering simulation remain later phases.
 
 ## Production safety
 
@@ -117,3 +127,5 @@ V2.0 does not pretend to include services that require external providers or val
 - Treat imported fitment as catalogue evidence, not automatically verified fitment.
 - Do not expose supplier cost or raw supplier feed payloads in public responses.
 - Test payment/refund/fulfillment workflows in sandbox or staging before production.
+- VIN lookups are sent by POST so VINs are not placed in access-log URLs; decoded data is assistive and the customer must confirm the catalogue variant.
+- When your custom domain becomes active, set Railway `APP_URL` (and normally `API_URL`) to that canonical HTTPS domain before relying on SEO metadata, email links or Stripe Connect return URLs.

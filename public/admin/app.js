@@ -549,7 +549,7 @@
     }).join('') : '<tr><td colspan="4">No suppliers connected.</td></tr>';
     const promoRows = promos.length ? promos.slice(0, 10).map(promo => `<tr><td><strong>${esc(promo.code)}</strong></td><td>${promo.percentOff ? `${esc(promo.percentOff)}%` : esc(money(promo.amountOffCents || 0))}</td><td>${esc(promo.uses || 0)}${promo.maxUses ? ` / ${esc(promo.maxUses)}` : ''}</td><td>${promo.active ? badge('ACTIVE') : badge('INACTIVE')}</td></tr>`).join('') : '<tr><td colspan="4">No promo codes yet.</td></tr>';
     const ruleRows = rules.length ? rules.map(rule => `<tr><td><strong>${esc(rule.name)}</strong></td><td>${esc(rule.supplier?.name || 'Any')}</td><td>${esc(rule.category?.name || 'Any')}</td><td>${rule.markupPercent != null ? `${esc(rule.markupPercent)}%` : '—'}</td><td>${esc(money(rule.minimumProfitCents || 0))}</td></tr>`).join('') : '<tr><td colspan="5">No pricing rules yet.</td></tr>';
-    const caseRows = cases.length ? cases.slice(0, 10).map(item => `<tr><td><strong>${esc(item.caseNumber)}</strong><br><span class="subtle">${esc(item.type.replaceAll('_',' '))}</span></td><td>${esc(item.order?.orderNumber || '—')}</td><td>${badge(item.status)}</td><td>${esc(item.user?.email || '—')}</td><td class="text-right"><button class="table-action" data-action="review-case" data-id="${esc(item.id)}">REVIEW →</button></td></tr>`).join('') : '<tr><td colspan="5">No buyer-protection cases.</td></tr>';
+    const caseRows = cases.length ? cases.slice(0, 10).map(item => `<tr><td><strong>${esc(item.caseNumber || `CASE-${item.id.slice(-8).toUpperCase()}`)}</strong><br><span class="subtle">${esc(item.type.replaceAll('_',' '))}</span></td><td>${esc(item.order?.orderNumber || '—')}</td><td>${badge(item.status)}</td><td>${esc(item.user?.email || '—')}</td><td class="text-right"><button class="table-action" data-action="review-case" data-id="${esc(item.id)}">REVIEW →</button></td></tr>`).join('') : '<tr><td colspan="5">No buyer-protection cases.</td></tr>';
 
     viewRoot.innerHTML = `
       <section class="metric-grid">
@@ -592,8 +592,10 @@
     const item = cases.find(row => row.id === id);
     if (!item) throw new Error('Support case not found.');
     const canRefund = state.user?.role === 'ADMIN' && item.order && !['REFUNDED'].includes(item.order.paymentStatus);
-    openModal(`<div class="modal-header"><div><div class="eyebrow">BUYER PROTECTION</div><h2>${esc(item.caseNumber)}</h2></div><button class="icon-btn" data-modal-close>×</button></div>
-      <div class="modal-body"><div class="detail-grid"><div><span>Type</span><strong>${esc(item.type.replaceAll('_',' '))}</strong></div><div><span>Status</span><strong>${esc(item.status.replaceAll('_',' '))}</strong></div><div><span>Order</span><strong>${esc(item.order?.orderNumber || '—')}</strong></div><div><span>Buyer</span><strong>${esc(item.user?.email || '—')}</strong></div></div><div class="code-block">${esc([item.reason, item.details].filter(Boolean).join('\n\n') || 'No description provided.')}</div></div>
+    const evidence = Array.isArray(item.evidenceUrls) ? item.evidenceUrls.filter(url => typeof url === 'string' && url.startsWith('https://')).slice(0, 8) : [];
+    const caseLabel = item.caseNumber || `CASE-${item.id.slice(-8).toUpperCase()}`;
+    openModal(`<div class="modal-header"><div><div class="eyebrow">BUYER PROTECTION</div><h2>${esc(caseLabel)}</h2></div><button class="icon-btn" data-modal-close>×</button></div>
+      <div class="modal-body"><div class="detail-grid"><div><span>Type</span><strong>${esc(item.type.replaceAll('_',' '))}</strong></div><div><span>Status</span><strong>${esc(item.status.replaceAll('_',' '))}</strong></div><div><span>Order</span><strong>${esc(item.order?.orderNumber || '—')}</strong></div><div><span>Buyer</span><strong>${esc(item.user?.email || '—')}</strong></div></div><div class="code-block">${esc([item.reason, item.details].filter(Boolean).join('\n\n') || 'No description provided.')}</div>${evidence.length?`<div class="case-evidence-grid">${evidence.map(url=>`<a href="${esc(url)}" target="_blank" rel="noreferrer"><img src="${esc(url)}" alt="Buyer evidence" loading="lazy"></a>`).join('')}</div>`:''}${item.sellerResponse?`<div class="case-response"><span class="eyebrow">SELLER RESPONSE</span><p>${esc(item.sellerResponse)}</p></div>`:''}</div>
       <div class="modal-footer"><select id="support-case-status" style="width:auto">${['OPEN','UNDER_REVIEW','AWAITING_SELLER','APPROVED','RESOLVED','REJECTED','CLOSED'].map(v => `<option value="${v}" ${item.status === v ? 'selected' : ''}>${v.replaceAll('_',' ')}</option>`).join('')}</select><button class="btn" data-action="save-case-status" data-id="${esc(item.id)}">Update case</button>${canRefund ? `<button class="btn btn-danger" data-action="refund-case" data-id="${esc(item.id)}" data-max="${esc(item.order.totalCents)}">Issue refund</button>` : ''}</div>`);
   }
 
@@ -649,8 +651,7 @@
           <label class="field span-2"><span>Specifications (one key=value per line)</span><textarea name="specsText" placeholder="Material=Aluminum\nCore size=600x300x76 mm">${esc(Object.entries(product?.specs || {}).map(([k,v]) => `${k}=${v}`).join('\n'))}</textarea></label>
           <label class="field"><span>SEO title</span><input name="seoTitle" maxlength="160" value="${esc(product?.seoTitle || '')}" placeholder="Product title | SANDMAN" /></label>
           <label class="field"><span>SEO description</span><input name="seoDescription" maxlength="320" value="${esc(product?.seoDescription || '')}" placeholder="Search-friendly summary" /></label>
-          <label class="field-check"><input name="requiresFitment" type="checkbox" ${product?.requiresFitment !== false ? 'checked' : ''} /><span>Requires vehicle fitment</span></label>
-          <label class="field-check"><input name="isUniversal" type="checkbox" ${product?.isUniversal ? 'checked' : ''} /><span>Universal part</span></label>
+          <div class="field span-2"><span>Fitment mode</span><div class="fitment-mode-options"><label class="field-check"><input name="fitmentMode" type="radio" value="vehicle" ${!product?.isUniversal ? 'checked' : ''} /><span>Vehicle-specific — requires compatible vehicle records</span></label><label class="field-check"><input name="fitmentMode" type="radio" value="universal" ${product?.isUniversal ? 'checked' : ''} /><span>Universal — no vehicle selection required</span></label></div></div>
           ${product ? `<div class="divider-title">Supplier sourcing</div><div class="span-2">${supplierSummary}</div><div class="divider-title">Current fitments</div><div class="span-2" style="display:flex;gap:6px;flex-wrap:wrap">${fitmentSummary}</div>` : ''}
         </div></div>
         <div class="modal-footer">${product ? '<button type="button" class="btn btn-danger" data-action="archive-product" data-id="' + esc(product.id) + '">Archive</button><button type="button" class="btn" data-action="manage-fitments" data-id="' + esc(product.id) + '">Manage fitments</button>' : ''}<button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">${product ? 'Save changes' : 'Create product'}</button></div>
@@ -700,8 +701,8 @@
       priceCents: Math.round(Number(fd.get('price') || 0) * 100),
       compareAtCents: fd.get('compareAt') ? Math.round(Number(fd.get('compareAt')) * 100) : undefined,
       currency: 'USD',
-      requiresFitment: fd.get('requiresFitment') === 'on',
-      isUniversal: fd.get('isUniversal') === 'on',
+      requiresFitment: fd.get('fitmentMode') !== 'universal',
+      isUniversal: fd.get('fitmentMode') === 'universal',
       status: String(fd.get('status') || 'DRAFT'),
       warrantyText: optionalString(fd.get('warrantyText')),
       returnDays: fd.get('returnDays') === '' ? undefined : Number(fd.get('returnDays')),

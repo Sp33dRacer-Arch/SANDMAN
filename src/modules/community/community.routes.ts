@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 import { createNotification } from '../../services/notification.service';
+import { publicProduct } from '../../lib/public-product';
 
 export const communityRouter = Router();
 
@@ -51,7 +53,8 @@ communityRouter.get('/seller/stats', requireAuth, asyncHandler(async (req, res) 
 
 communityRouter.get('/seller/:sellerId', asyncHandler(async (req, res) => {
   const sellerId = routeParam(req.params.sellerId, 'sellerId');
-  const [seller, sold, listings] = await Promise.all([
+  const paidMarketplaceWhere: Prisma.OrderItemWhereInput = { sellerId, sourceType: 'MARKETPLACE', order: { paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] } } };
+  const [seller, soldAggregate, soldLines, shippedLines, activeListingCount, listings] = await Promise.all([
     prisma.user.findUnique({
       where: { id: sellerId },
       select: {
@@ -59,7 +62,10 @@ communityRouter.get('/seller/:sellerId', asyncHandler(async (req, res) => {
         sellerProfile: true,
       },
     }),
-    prisma.orderItem.count({ where: { sellerId, sourceType: 'MARKETPLACE', order: { paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] } } } }),
+    prisma.orderItem.aggregate({ where: paidMarketplaceWhere, _sum: { quantity: true } }),
+    prisma.orderItem.count({ where: paidMarketplaceWhere }),
+    prisma.orderItem.count({ where: { ...paidMarketplaceWhere, sellerShippedAt: { not: null } } }),
+    prisma.product.count({ where: { sellerId, sourceType: 'MARKETPLACE', status: 'ACTIVE' } }),
     prisma.product.findMany({
       where: { sellerId, sourceType: 'MARKETPLACE', status: 'ACTIVE' },
       include: { images: { orderBy: { position: 'asc' }, take: 1 }, category: true },
@@ -68,7 +74,29 @@ communityRouter.get('/seller/:sellerId', asyncHandler(async (req, res) => {
     }),
   ]);
   if (!seller) throw new HttpError(404, 'Seller not found');
-  res.json({ seller, sold, listings });
+  const sold = soldLines;
+  const unitsSold = soldAggregate._sum.quantity ?? 0;
+  const profile = seller.sellerProfile;
+  const badges = [
+    ...(profile?.verified ? ['VERIFIED'] : []),
+    ...(profile?.ratingAverage != null && profile.ratingAverage >= 4.7 && profile.ratingCount >= 10 && soldLines >= 25 ? ['TOP_SELLER'] : []),
+    ...(soldLines >= 50 ? ['EXPERIENCED_SELLER'] : []),
+  ];
+  res.json({
+    seller,
+    sold,
+    unitsSold,
+    listings: listings.map(publicProduct),
+    reputation: {
+      ratingAverage: profile?.ratingAverage ?? 0,
+      ratingCount: profile?.ratingCount ?? 0,
+      responseTimeHours: profile?.responseTimeHours ?? null,
+      shippedOrderRate: soldLines ? Math.round((shippedLines / soldLines) * 1000) / 10 : null,
+      activeListings: activeListingCount,
+      memberSince: seller.createdAt,
+      badges,
+    },
+  });
 }));
 
 communityRouter.use(requireAuth);

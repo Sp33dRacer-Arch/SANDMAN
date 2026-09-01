@@ -1,0 +1,50 @@
+SANDMAN V2.3 — GROWTH & TRUST / SCAN-FIXED
+============================================
+
+This is an in-place upgrade over the current SANDMAN V2.2 project.
+Do not replace .git, .env, or node_modules.
+
+1) Extract the V2.3 PATCH ZIP in Downloads.
+
+2) Overlay it onto the existing repository:
+robocopy "$env:USERPROFILE\Downloads\SANDMAN-V2.3-FIXED-UPGRADE-PATCH" "$env:USERPROFILE\Downloads\SANDMAN-backend" /E /XD .git node_modules /XF .env /R:1 /W:1
+
+3) Verify locally before staging anything:
+cd "$env:USERPROFILE\Downloads\SANDMAN-backend"
+node --check public\store\app.js
+node --check public\admin\app.js
+npx prisma validate
+npm run typecheck
+npm test
+npm run build
+git diff --check
+git status
+
+Or run:
+.\VERIFY-V2.3.ps1
+
+4) STOP if any command fails. Do not commit/push until the diff/status is reviewed.
+
+5) Production database:
+V2.3 adds NO new Prisma migration. Keep Railway pre-deploy as:
+npm run prisma:deploy
+
+6) Railway remains:
+Build:      npm run prisma:generate && npm run build
+Pre-deploy: npm run prisma:deploy
+Start:      npm start
+Health:     /api/health
+
+7) Custom domain / SEO:
+When the-sandmans.com (or your final canonical domain) is active, set APP_URL to the exact HTTPS canonical domain. Normally set API_URL to the same public SANDMAN URL. Do not include a trailing slash unless your existing configuration already relies on one.
+
+8) External integrations still require live verification:
+- NHTSA vPIC availability for VIN decoding
+- Cloudinary signed image uploads
+- Stripe / PayPal sandbox flows
+- supplier inventory/fulfillment
+- carrier tracking links
+
+SECURITY
+========
+Never commit .env, payment secrets, Cloudinary API secret, supplier credentials, JWT secret, or database credentials.

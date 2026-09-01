@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
@@ -6,8 +7,13 @@ import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { optionalAuth, requireAuth, requireRole } from '../../middleware/auth';
 import { evaluateFitment } from '../../services/fitment.service';
+import { decodeVinWithNhtsa, resolveVinCandidates } from '../../services/vin.service';
+import { scoreProductSearch } from '../../services/search-ranking.service';
+import { deliveryWindow } from '../../services/shipping.service';
+import { publicProduct } from '../../lib/public-product';
 
 export const v2Router = Router();
+const vinLookupLimiter = rateLimit({ windowMs: 60_000, limit: 30, standardHeaders: 'draft-8', legacyHeaders: false });
 
 const optionalQueryBoolean = z.preprocess((value) => {
   if (value === undefined || value === null || value === '') return undefined;
@@ -67,7 +73,75 @@ v2Router.get('/catalog/status', asyncHandler(async (_req, res) => {
     prisma.productFitment.count(),
     prisma.supplier.count({ where: { active: true } }),
   ]);
-  res.json({ version: '2.0.0', vehicles: { makes, models, variants }, products: { total: products, active: activeProducts }, fitments: { total: fitments, verified: verifiedFitments }, activeSuppliers: suppliers });
+  res.json({ version: '2.3.0', vehicles: { makes, models, variants }, products: { total: products, active: activeProducts }, fitments: { total: fitments, verified: verifiedFitments }, activeSuppliers: suppliers });
+}));
+
+
+
+// VINs are submitted in the request body rather than the URL so reverse-proxy
+// and access logs do not persist the full vehicle identifier in a request path.
+v2Router.post('/vin/decode', vinLookupLimiter, asyncHandler(async (req, res) => {
+  const { vin } = z.object({ vin: z.string().trim().min(1).max(32) }).parse(req.body);
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const decoded = await decodeVinWithNhtsa(vin);
+    const resolution = await resolveVinCandidates(decoded);
+    // NHTSA can return partial data alongside decode warnings/errors. Keep those
+    // candidates available for manual confirmation, but never call one an
+    // automatic high-confidence match when the decoder itself reported an error.
+    const matchedVariant = decoded.errorCode ? null : resolution.matchedVariant;
+    res.json({
+      provider: 'NHTSA_VPIC',
+      decoded,
+      candidates: resolution.candidates,
+      matchedVariant,
+      note: matchedVariant
+        ? 'SANDMAN found a high-confidence catalogue match. Confirm the vehicle before saving it.'
+        : decoded.errorCode
+          ? 'VIN returned a decoder warning. Review the decoded details and manually confirm the correct SANDMAN catalogue variant.'
+          : 'VIN decoded. Choose the correct SANDMAN catalogue variant before using fitment results.',
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'VIN lookup failed';
+    throw new HttpError(message.includes('17 characters') ? 400 : 502, message);
+  }
+}));
+
+v2Router.get('/shipping-estimate/:productId', asyncHandler(async (req, res) => {
+  const productId = routeParam(req.params.productId, 'productId');
+  const product = await prisma.product.findFirst({
+    where: { id: productId, status: 'ACTIVE' },
+    select: {
+      id: true,
+      sourceType: true,
+      sellerShippingCents: true,
+      shippingMinDays: true,
+      shippingMaxDays: true,
+      supplierLinks: {
+        where: { active: true, supplier: { active: true } },
+        select: { shippingCents: true, leadTimeDays: true, warehouseCountry: true, availableStock: true },
+      },
+    },
+  });
+  if (!product) throw new HttpError(404, 'Product not found');
+  const viableSupplierLinks = product.supplierLinks.filter(link => link.availableStock == null || link.availableStock > 0);
+  const window = deliveryWindow({
+    productMinDays: product.shippingMinDays,
+    productMaxDays: product.shippingMaxDays,
+    supplierLeadTimes: viableSupplierLinks.map(link => link.leadTimeDays),
+  });
+  const shippingCents = product.sourceType === 'MARKETPLACE'
+    ? product.sellerShippingCents
+    : viableSupplierLinks.length
+      ? Math.min(...viableSupplierLinks.map(link => link.shippingCents))
+      : null;
+  res.json({
+    productId,
+    ...window,
+    shippingCents,
+    warehouseCountries: [...new Set(viableSupplierLinks.map(link => link.warehouseCountry).filter(Boolean))],
+    finalAtCheckout: true,
+  });
 }));
 
 v2Router.get('/vehicles/picker', asyncHandler(async (req, res) => {
@@ -176,7 +250,7 @@ v2Router.get('/search', asyncHandler(async (req, res) => {
     },
     include: productInclude,
     orderBy: [{ purchaseCount: 'desc' }, { viewCount: 'desc' }, { createdAt: 'desc' }],
-    take: query.limit,
+    take: Math.min(query.limit * 8, 250),
   });
 
   const vehicles = await prisma.vehicleVariant.findMany({
@@ -191,33 +265,42 @@ v2Router.get('/search', asyncHandler(async (req, res) => {
     take: 12,
   });
 
-  let shaped = products.map((product: any) => ({
-    ...product,
+ let shaped = products.map((product: any) => {
+  const { supplierLinks: _supplierLinks, ...productWithoutSupplierData } = product;
+  return {
+    ...publicProduct(productWithoutSupplierData),
+    purchaseCount: product.purchaseCount ?? 0,
+    viewCount: product.viewCount ?? 0,
     availability: publicAvailability(product),
     fitment: evaluateFitment(product, query.vehicleVariantId),
-    supplierLinks: undefined,
-  }));
+    searchScore: scoreProductSearch(product, query.q),
+  };
+});
   if (query.inStock) shaped = shaped.filter(product => product.availability.inStock);
-  res.json({ products: shaped, vehicles });
+  shaped.sort((a, b) => b.searchScore - a.searchScore || b.purchaseCount - a.purchaseCount || b.viewCount - a.viewCount);
+  res.json({ products: shaped.slice(0, query.limit), vehicles });
 }));
 
 v2Router.get('/products/:id/supplier-options', asyncHandler(async (req, res) => {
   const product = await prisma.product.findFirst({
     where: { id: routeParam(req.params.id, 'id'), status: 'ACTIVE' },
-    include: { supplierLinks: { where: { active: true, supplier: { active: true } }, include: { supplier: true }, orderBy: [{ supplier: { priority: 'asc' } }, { shippingCents: 'asc' }] } },
+    include: {
+      supplierLinks: {
+        where: { active: true, supplier: { active: true } },
+        select: { availableStock: true, shippingCents: true, leadTimeDays: true, warehouseCountry: true },
+        orderBy: [{ supplier: { priority: 'asc' } }, { shippingCents: 'asc' }],
+      },
+    },
   });
   if (!product) throw new HttpError(404, 'Product not found');
   if (product.sourceType !== 'DROPSHIP') return res.json([]);
+  // This is a buyer-facing availability endpoint. Keep supplier identity,
+  // internal link IDs, exact stock, reliability scoring and sync timestamps private.
   res.json(product.supplierLinks.map(link => ({
-    id: link.id,
-    supplier: { name: link.supplier.name, code: link.supplier.code },
     availability: link.availableStock == null ? 'CHECK_WITH_SUPPLIER' : link.availableStock > 0 ? 'IN_STOCK' : 'OUT_OF_STOCK',
-    availableStock: link.availableStock,
     shippingCents: link.shippingCents,
     leadTimeDays: link.leadTimeDays,
     warehouseCountry: link.warehouseCountry,
-    reliabilityScore: link.reliabilityScore,
-    lastSyncedAt: link.lastSyncedAt,
   })));
 }));
 

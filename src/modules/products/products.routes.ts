@@ -5,6 +5,8 @@ import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { evaluateFitment } from '../../services/fitment.service';
+import { scoreProductSearch } from '../../services/search-ranking.service';
+import { publicProduct } from '../../lib/public-product';
 
 export const productsRouter = Router();
 
@@ -80,36 +82,84 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
     ...(and.length ? { AND: and } : {}),
   };
 
-  const [items, total] = await prisma.$transaction([
-    prisma.product.findMany({
-      where,
-      include: {
-        category: true,
-        images: { orderBy: { position: 'asc' }, take: 2 },
-        supplierLinks: { where: { active: true }, select: { availableStock: true } },
-        seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
-        reviews: { where: { status: 'PUBLISHED' }, select: { rating: true } },
-        fitments: { select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true } },
-      },
+  const listInclude = {
+    category: true,
+    images: { orderBy: { position: 'asc' as const }, take: 1 },
+    supplierLinks: { where: { active: true }, select: { availableStock: true } },
+    seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
+    // Listing cards need only the selected vehicle's evidence, never every fitment row.
+    fitments: {
+      where: { vehicleVariantId: q.vehicleVariantId ?? '__NO_SELECTED_VEHICLE__' },
+      select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true },
+    },
+  };
+
+  // Guarantee that exact part-number/name matches are surfaced on page one even
+  // when the product is older than newer broad text matches. The rest of each
+  // default-search page is then relevance-ranked locally.
+  const shouldRankSearch = Boolean(q.q && q.sort === 'newest');
+  const exactIdRows = shouldRankSearch ? await prisma.product.findMany({
+    where: {
+      AND: [
+        where,
+        { OR: [
+          { sku: { equals: q.q!, mode: 'insensitive' } },
+          { manufacturerPn: { equals: q.q!, mode: 'insensitive' } },
+          { name: { equals: q.q!, mode: 'insensitive' } },
+        ] },
+      ],
+    },
+    select: { id: true },
+    take: q.limit,
+  }) : [];
+  const exactIds = exactIdRows.map(row => row.id);
+  const regularWhere = exactIds.length ? { AND: [where, { id: { notIn: exactIds } }] } : where;
+  const regularSkip = shouldRankSearch && q.page > 1
+    ? Math.max(0, (q.page - 1) * q.limit - exactIds.length)
+    : (q.page - 1) * q.limit;
+  const regularTake = shouldRankSearch && q.page === 1 ? Math.max(0, q.limit - exactIds.length) : q.limit;
+
+  const exactItems = shouldRankSearch && q.page === 1 && exactIds.length ? await prisma.product.findMany({
+    where: { AND: [where, { id: { in: exactIds } }] },
+    include: listInclude,
+  }) : [];
+  const [regularItems, total] = await Promise.all([
+    regularTake > 0 ? prisma.product.findMany({
+      where: regularWhere,
+      include: listInclude,
       orderBy,
-      skip: (q.page - 1) * q.limit,
-      take: q.limit,
-    }),
+      skip: regularSkip,
+      take: regularTake,
+    }) : Promise.resolve([]),
     prisma.product.count({ where }),
   ]);
+  const items = [...exactItems, ...regularItems];
+
+  const ratingRows = items.length ? await prisma.productReview.groupBy({
+    by: ['productId'],
+    where: { productId: { in: items.map(item => item.id) }, status: 'PUBLISHED' },
+    _avg: { rating: true },
+    _count: { rating: true },
+  }) : [];
+  const ratingMap = new Map(ratingRows.map(row => [row.productId, { rating: row._avg.rating ?? null, count: row._count.rating }]));
 
   const mapped = items.map(item => {
-    const { supplierLinks, reviews, fitments, ...publicItem } = item;
+    const { supplierLinks, fitments, ...itemWithoutSupplierData } = item;
+    const publicItem = publicProduct(itemWithoutSupplierData);
     const fitment = q.vehicleVariantId ? evaluateFitment({ ...item, fitments }, q.vehicleVariantId) : null;
+    const review = ratingMap.get(item.id);
     return {
       ...publicItem,
-      rating: reviews.length ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length : null,
-      reviewCount: reviews.length,
+      rating: review?.rating ?? null,
+      reviewCount: review?.count ?? 0,
       inStock: item.sourceType === 'MARKETPLACE' ? (item.stockQuantity ?? 0) > 0 : supplierLinks.some(link => link.availableStock === null || link.availableStock > 0),
       fitmentStatus: fitment?.status ?? null,
       fitmentVerified: fitment?.verified ?? false,
     };
   });
+  if (shouldRankSearch && q.q) {
+    mapped.sort((a, b) => scoreProductSearch(b, q.q!) - scoreProductSearch(a, q.q!) || b.purchaseCount - a.purchaseCount || b.viewCount - a.viewCount);
+  }
   if (q.q) await prisma.searchEvent.create({ data: { query: q.q, resultsCount: total } }).catch(() => undefined);
   res.json({ items: mapped, total, page: q.page, pages: Math.max(1, Math.ceil(total / q.limit)) });
 }));
@@ -140,23 +190,66 @@ productsRouter.get('/:slug', asyncHandler(async (req, res) => {
       seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
       reviews: {
         where: { status: 'PUBLISHED' },
-        include: { user: { select: { id: true, firstName: true, lastName: true } } },
+        include: { user: { select: { id: true, firstName: true, lastName: true } }, orderItem: { select: { fitmentSnapshot: true } } },
         orderBy: { createdAt: 'desc' },
         take: 20,
       },
     },
   });
   if (!product) throw new HttpError(404, 'Product not found');
+  const reviewAggregate = await prisma.productReview.aggregate({ where: { productId: product.id, status: 'PUBLISHED' }, _avg: { rating: true }, _count: { rating: true } });
+
+  const reviewVariantIds = [...new Set(product.reviews.map(review => {
+    const snapshot = review.orderItem?.fitmentSnapshot as { vehicleVariantId?: string } | null;
+    return snapshot?.vehicleVariantId;
+  }).filter((id): id is string => Boolean(id)))];
+  const reviewVehicles = reviewVariantIds.length ? await prisma.vehicleVariant.findMany({
+    where: { id: { in: reviewVariantIds } },
+    select: { id: true, yearStart: true, yearEnd: true, trim: true, engineCode: true, model: { select: { name: true, make: { select: { name: true } } } } },
+  }) : [];
+  const reviewVehicleMap = new Map(reviewVehicles.map(vehicle => [vehicle.id, vehicle]));
+  const publicReviews = product.reviews.map(review => {
+    const snapshot = review.orderItem?.fitmentSnapshot as { vehicleVariantId?: string } | null;
+    return {
+      id: review.id,
+      rating: review.rating,
+      title: review.title,
+      body: review.body,
+      mediaUrls: review.mediaUrls,
+      verifiedPurchase: review.verifiedPurchase,
+      createdAt: review.createdAt,
+      user: { firstName: review.user.firstName, lastName: review.user.lastName },
+      vehicle: snapshot?.vehicleVariantId ? reviewVehicleMap.get(snapshot.vehicleVariantId) ?? null : null,
+    };
+  });
 
   const fitment = evaluateFitment(product, vehicleVariantId);
   const fitmentStatus = fitment.status;
-  const rating = product.reviews.length ? product.reviews.reduce((sum, review) => sum + review.rating, 0) / product.reviews.length : null;
+  const rating = reviewAggregate._avg.rating ?? null;
   const inStock = product.sourceType === 'MARKETPLACE'
     ? (product.stockQuantity ?? 0) > 0
     : product.supplierLinks.some(link => link.availableStock === null || link.availableStock > 0);
 
-  const { supplierLinks: _supplierLinks, ...publicProduct } = product;
-  res.json({ ...publicProduct, fitmentStatus, fitmentVerified: fitment.verified, fitmentReason: fitment.reason, fitsVehicle: fitment.fits, rating, reviewCount: product.reviews.length, inStock });
+  const { supplierLinks: _supplierLinks, reviews: _reviews, ...productWithoutSupplierData } = product;
+  const safeProduct = publicProduct(productWithoutSupplierData);
+  const safeSeller = safeProduct.seller ? {
+    id: safeProduct.seller.id,
+    firstName: safeProduct.seller.firstName,
+    lastName: safeProduct.seller.lastName,
+    createdAt: safeProduct.seller.createdAt,
+    sellerProfile: safeProduct.seller.sellerProfile ? {
+      storeName: safeProduct.seller.sellerProfile.storeName,
+      bio: safeProduct.seller.sellerProfile.bio,
+      location: safeProduct.seller.sellerProfile.location,
+      verified: safeProduct.seller.sellerProfile.verified,
+      responseTimeHours: safeProduct.seller.sellerProfile.responseTimeHours,
+      totalSales: safeProduct.seller.sellerProfile.totalSales,
+      ratingAverage: safeProduct.seller.sellerProfile.ratingAverage,
+      ratingCount: safeProduct.seller.sellerProfile.ratingCount,
+      createdAt: safeProduct.seller.sellerProfile.createdAt,
+    } : null,
+  } : null;
+  res.json({ ...safeProduct, seller: safeSeller, reviews: publicReviews, fitmentStatus, fitmentVerified: fitment.verified, fitmentReason: fitment.reason, fitsVehicle: fitment.fits, rating, reviewCount: reviewAggregate._count.rating, inStock });
 }));
 
 productsRouter.get('/:id/fitment/:vehicleVariantId', asyncHandler(async (req, res) => {

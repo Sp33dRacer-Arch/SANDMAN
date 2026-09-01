@@ -5,6 +5,8 @@ import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { optionalAuth, requireAuth } from '../../middleware/auth';
+import { scoreProductSearch } from '../../services/search-ranking.service';
+import { publicProduct } from '../../lib/public-product';
 
 export const experienceRouter = Router();
 
@@ -15,12 +17,12 @@ experienceRouter.get('/home', optionalAuth, asyncHandler(async (req, res) => {
     prisma.product.findMany({ where: { status: 'ACTIVE', sourceType: 'MARKETPLACE', stockQuantity: { gt: 0 } }, include: { images: { orderBy: { position: 'asc' }, take: 1 }, category: true, seller: { select: { id: true, sellerProfile: true } } }, orderBy: { createdAt: 'desc' }, take: 8 }),
     primary ? prisma.product.findMany({ where: { status: 'ACTIVE', OR: [{ isUniversal: true }, { fitments: { some: { vehicleVariantId: primary.vehicleVariantId } } }] }, include: { images: { orderBy: { position: 'asc' }, take: 1 }, category: true }, orderBy: [{ purchaseCount: 'desc' }, { createdAt: 'desc' }], take: 8 }) : Promise.resolve([]),
   ]);
-  res.json({ primaryGarageVehicle: primary, trending, marketplace, forGarage });
+  res.json({ primaryGarageVehicle: primary, trending: trending.map(publicProduct), marketplace: marketplace.map(publicProduct), forGarage: forGarage.map(publicProduct) });
 }));
 
 experienceRouter.get('/search/suggestions', optionalAuth, asyncHandler(async (req, res) => {
   const { q } = z.object({ q: z.string().trim().min(1).max(120) }).parse(req.query);
-  const [products, engines, brands] = await Promise.all([
+  const [productCandidates, engines, brandRows, categories] = await Promise.all([
     prisma.product.findMany({
       where: {
         status: 'ACTIVE',
@@ -29,25 +31,42 @@ experienceRouter.get('/search/suggestions', optionalAuth, asyncHandler(async (re
           { sku: { contains: q, mode: 'insensitive' } },
           { manufacturerPn: { contains: q, mode: 'insensitive' } },
           { brand: { contains: q, mode: 'insensitive' } },
+          { category: { name: { contains: q, mode: 'insensitive' } } },
         ],
       },
-      select: { id: true, name: true, slug: true, sku: true, brand: true, manufacturerPn: true, priceCents: true, images: { orderBy: { position: 'asc' }, take: 1 } },
-      take: 8,
-      orderBy: { purchaseCount: 'desc' },
+      select: { id: true, name: true, slug: true, sku: true, brand: true, manufacturerPn: true, priceCents: true, purchaseCount: true, viewCount: true, category: { select: { name: true, slug: true } }, images: { orderBy: { position: 'asc' }, take: 1 } },
+      take: 120,
     }),
     prisma.vehicleVariant.findMany({
-      where: { OR: [{ engineCode: { contains: q, mode: 'insensitive' } }, { engineName: { contains: q, mode: 'insensitive' } }] },
-      select: { id: true, engineCode: true, engineName: true, model: { select: { name: true, make: { select: { name: true } } } } },
-      take: 5,
+      where: { OR: [
+        { engineCode: { contains: q, mode: 'insensitive' } },
+        { engineName: { contains: q, mode: 'insensitive' } },
+        { chassisCode: { contains: q, mode: 'insensitive' } },
+        { model: { name: { contains: q, mode: 'insensitive' } } },
+        { model: { make: { name: { contains: q, mode: 'insensitive' } } } },
+      ] },
+      select: { id: true, yearStart: true, yearEnd: true, chassisCode: true, engineCode: true, engineName: true, model: { select: { name: true, make: { select: { name: true } } } } },
+      take: 8,
     }),
     prisma.product.findMany({
       where: { status: 'ACTIVE', brand: { contains: q, mode: 'insensitive' } },
       distinct: ['brand'],
       select: { brand: true },
-      take: 5,
+      take: 6,
     }),
+    prisma.category.findMany({ where: { name: { contains: q, mode: 'insensitive' } }, select: { name: true, slug: true }, take: 6 }),
   ]);
-  res.json({ products, engines, brands: brands.map(row => row.brand).filter(Boolean) });
+  const products = productCandidates
+    .map(product => ({ ...product, searchScore: scoreProductSearch(product, q) }))
+    .sort((a, b) => b.searchScore - a.searchScore || b.purchaseCount - a.purchaseCount || b.viewCount - a.viewCount)
+    .slice(0, 8);
+  res.json({
+    products,
+    engines,
+    brands: brandRows.map(row => row.brand).filter(Boolean),
+    categories,
+    exactPartNumber: products.find(product => product.searchScore >= 980) ?? null,
+  });
 }));
 
 experienceRouter.post('/search/track', optionalAuth, asyncHandler(async (req, res) => {
@@ -70,9 +89,10 @@ experienceRouter.get('/compare', asyncHandler(async (req, res) => {
     },
   });
   res.json(products.map(p => {
-    const { supplierLinks, reviews, ...publicProduct } = p;
+    const { supplierLinks, reviews, ...productWithoutSupplierData } = p;
+    const safeProduct = publicProduct(productWithoutSupplierData);
     return {
-      ...publicProduct,
+      ...safeProduct,
       rating: reviews.length ? reviews.reduce((n, r) => n + r.rating, 0) / reviews.length : null,
       reviewCount: reviews.length,
       inStock: p.sourceType === 'MARKETPLACE' ? (p.stockQuantity ?? 0) > 0 : supplierLinks.some(link => link.availableStock === null || link.availableStock > 0),
@@ -98,7 +118,7 @@ experienceRouter.get('/products/:id/recommendations', asyncHandler(async (req, r
     orderBy: [{ purchaseCount: 'desc' }, { viewCount: 'desc' }],
     take: 8,
   });
-  res.json(items);
+  res.json(items.map(publicProduct));
 }));
 
 experienceRouter.post('/products/:id/view', optionalAuth, asyncHandler(async (req, res) => {
@@ -116,7 +136,7 @@ experienceRouter.get('/recently-viewed', requireAuth, asyncHandler(async (req, r
     orderBy: { viewedAt: 'desc' },
     take: 20,
   });
-  res.json(rows);
+  res.json(rows.map(row => ({ ...row, product: publicProduct(row.product) })));
 }));
 
 experienceRouter.get('/wishlist', requireAuth, asyncHandler(async (req, res) => {
@@ -125,7 +145,7 @@ experienceRouter.get('/wishlist', requireAuth, asyncHandler(async (req, res) => 
     include: { product: { include: { images: { orderBy: { position: 'asc' }, take: 1 }, category: true } } },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(items);
+  res.json(items.map(item => ({ ...item, product: publicProduct(item.product) })));
 }));
 
 experienceRouter.post('/wishlist/:productId', requireAuth, asyncHandler(async (req, res) => {
@@ -157,7 +177,7 @@ experienceRouter.get('/alerts', requireAuth, asyncHandler(async (req, res) => {
     include: { product: { include: { images: { orderBy: { position: 'asc' }, take: 1 } } } },
     orderBy: { createdAt: 'desc' },
   });
-  res.json(alerts);
+  res.json(alerts.map(alert => ({ ...alert, product: publicProduct(alert.product) })));
 }));
 
 experienceRouter.post('/alerts', requireAuth, asyncHandler(async (req, res) => {

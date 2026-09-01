@@ -6,6 +6,7 @@ import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { optionalAuth, requireAuth } from '../../middleware/auth';
 import { evaluateFitment } from '../../services/fitment.service';
+import { publicProduct } from '../../lib/public-product';
 
 export const buildsRouter = Router();
 
@@ -33,7 +34,7 @@ function summarize(build: any) {
   const items = build.items.map((item: any) => {
     const p = item.product;
     const fitment = evaluateFitment(p, variantId);
-    return { ...item, fitmentStatus: fitment.status, fitmentVerified: fitment.verified, fitmentReason: fitment.reason, lineTotalCents: p.priceCents * item.quantity };
+    return { ...item, product: publicProduct(p), fitmentStatus: fitment.status, fitmentVerified: fitment.verified, fitmentReason: fitment.reason, lineTotalCents: p.priceCents * item.quantity };
   });
   const totalCents = items.reduce((sum: number, item: any) => sum + item.lineTotalCents, 0);
   const incompatible = items.filter((item: any) => item.fitmentStatus === 'DOES_NOT_FIT').length;

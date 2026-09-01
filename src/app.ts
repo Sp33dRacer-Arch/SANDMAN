@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
+import fs from 'fs';
 import { rateLimit } from 'express-rate-limit';
 import { env } from './config/env';
 import { webhooksRouter } from './modules/webhooks/webhooks.routes';
@@ -28,6 +29,8 @@ import { opsRouter } from './modules/ops/ops.routes';
 import { supplierFeedRouter } from './modules/supplier-feed/supplier-feed.routes';
 import { v2Router } from './modules/v2/v2.routes';
 import { uploadsRouter } from './modules/uploads/uploads.routes';
+import { prisma } from './lib/prisma';
+import { asyncHandler } from './lib/async-handler';
 
 export const app = express();
 
@@ -72,13 +75,74 @@ app.use('/assets', express.static(path.join(storeUiDir, 'assets')));
 app.get('/api', (_req, res) => res.json({
   name: 'SANDMAN',
   description: 'Automotive parts marketplace, builds, fitment, dropshipping and seller platform',
-  version: '2.0.0',
+  version: '2.3.0',
   health: '/api/health',
   admin: '/admin',
   storefront: '/',
 }));
 
-app.get('/', (_req, res) => res.sendFile(path.join(storeUiDir, 'index.html')));
+const storefrontTemplate = fs.readFileSync(path.join(storeUiDir, 'index.html'), 'utf8');
+const htmlEsc = (value: string) => value.replace(/[&<>\"']/g, char => {
+  if (char === '&') return '&amp;';
+  if (char === '<') return '&lt;';
+  if (char === '>') return '&gt;';
+  if (char === '\"') return '&quot;';
+  return '&#39;';
+});
+function storefrontHtml(meta?: { title?: string; description?: string; canonical?: string; image?: string | null }) {
+  const title = meta?.title ?? 'SANDMAN — Automotive Parts Marketplace';
+  const description = meta?.description ?? 'Find automotive parts by vehicle, engine code, OEM number or SKU. Verified fitment, supplier stock, marketplace sellers and builds.';
+  const canonical = meta?.canonical ?? `${env.APP_URL.replace(/\/$/, '')}/`;
+  const image = meta?.image ?? `${env.APP_URL.replace(/\/$/, '')}/assets/sandman-logo.webp`;
+  return storefrontTemplate
+    .replace(/<title>[^<]*<\/title>/, `<title>${htmlEsc(title)}</title>`)
+    .replace(/<meta name="description" content="[^"]*"\s*\/>/, `<meta name="description" content="${htmlEsc(description)}" />`)
+    .replace('</head>', `<link rel="canonical" href="${htmlEsc(canonical)}" /><meta property="og:title" content="${htmlEsc(title)}" /><meta property="og:description" content="${htmlEsc(description)}" /><meta property="og:url" content="${htmlEsc(canonical)}" /><meta property="og:type" content="website" /><meta property="og:image" content="${htmlEsc(image)}" /><meta name="twitter:card" content="summary_large_image" /></head>`);
+}
+const sendStorefront = (res: express.Response, meta?: Parameters<typeof storefrontHtml>[0]) => res.type('html').send(storefrontHtml(meta));
+
+app.get('/', (_req, res) => sendStorefront(res));
+app.get('/products/:slug', asyncHandler(async (req, res) => {
+  const slug = String(req.params.slug ?? '');
+  const product = await prisma.product.findFirst({
+    where: { slug, status: 'ACTIVE' },
+    select: { name: true, shortDesc: true, description: true, brand: true, seoTitle: true, seoDescription: true, images: { orderBy: { position: 'asc' }, take: 1 } },
+  });
+  if (!product) {
+    res.status(404);
+    return sendStorefront(res, { title: 'Product not found — SANDMAN', description: 'This SANDMAN product is unavailable.', canonical: `${env.APP_URL.replace(/\/$/, '')}/products/${encodeURIComponent(slug)}` });
+  }
+  return sendStorefront(res, {
+    title: product.seoTitle || `${product.name}${product.brand ? ` | ${product.brand}` : ''} — SANDMAN`,
+    description: product.seoDescription || product.shortDesc || product.description.slice(0, 155),
+    canonical: `${env.APP_URL.replace(/\/$/, '')}/products/${encodeURIComponent(slug)}`,
+    image: product.images[0]?.url ?? null,
+  });
+}));
+
+app.get('/robots.txt', (_req, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\nDisallow: /account\nDisallow: /checkout\nDisallow: /orders\nDisallow: /seller$\nDisallow: /garage\nDisallow: /messages\nDisallow: /wishlist\nDisallow: /notifications\nDisallow: /returns-center\nSitemap: ${env.APP_URL.replace(/\/$/, '')}/sitemap.xml\n`);
+});
+let sitemapCache: { expiresAt: number; xml: string } | null = null;
+app.get('/sitemap.xml', asyncHandler(async (_req, res) => {
+  if (sitemapCache && sitemapCache.expiresAt > Date.now()) {
+    res.setHeader('Cache-Control', 'public, max-age=900');
+    return res.type('application/xml').send(sitemapCache.xml);
+  }
+  // A sitemap file may contain at most 50,000 URLs. Leave room for the static
+  // storefront routes below instead of accidentally producing an invalid file.
+  const products = await prisma.product.findMany({ where: { status: 'ACTIVE' }, select: { slug: true, updatedAt: true }, orderBy: { updatedAt: 'desc' }, take: 49_980 });
+  const base = env.APP_URL.replace(/\/$/, '');
+  const staticPaths = ['/', '/shop', '/vehicles', '/build-advisor', '/marketplace', '/buyer-protection', '/shipping', '/returns', '/terms', '/privacy', '/about'];
+  const urls = [
+    ...staticPaths.map(pathname => `<url><loc>${htmlEsc(base + pathname)}</loc></url>`),
+    ...products.map(product => `<url><loc>${htmlEsc(`${base}/products/${encodeURIComponent(product.slug)}`)}</loc><lastmod>${product.updatedAt.toISOString()}</lastmod></url>`),
+  ].join('');
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
+  sitemapCache = { expiresAt: Date.now() + 15 * 60 * 1000, xml };
+  res.setHeader('Cache-Control', 'public, max-age=900');
+  res.type('application/xml').send(xml);
+}));
 
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
@@ -101,6 +165,11 @@ app.use('/api/security', securityRouter);
 app.use('/api/admin/ops', opsRouter);
 app.use('/api/supplier-feed', supplierFeedRouter);
 app.use('/api/v2', v2Router);
+
+// History-API storefront routes. Old #/ links remain supported by the browser router,
+// but public/canonical URLs use normal paths so products and landing pages are crawlable.
+const storefrontRoute = /^\/(?:shop|vehicles|vehicle-finder|build-advisor|advisor|requests|garage|builds(?:\/[^/]+)?|public-builds\/[^/]+|compare|wishlist|messages|sellers\/[^/]+|sell|seller|account|notifications|checkout|orders\/[^/]+|returns-center|buyer-protection|shipping|returns|terms|privacy|about|verify-email|reset-password|marketplace)\/?$/;
+app.get(storefrontRoute, (_req, res) => sendStorefront(res));
 
 app.use(notFound);
 app.use(errorHandler);

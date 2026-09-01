@@ -7,6 +7,18 @@ const optionalNonEmptyString = z.preprocess(value => {
   return trimmed ? trimmed : undefined;
 }, z.string().min(1).optional());
 
+const optionalUrlString = z.preprocess(value => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}, z.string().url().optional());
+
+const optionalMin24String = z.preprocess(value => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}, z.string().min(24).optional());
+
 const booleanFromEnv = z.preprocess(value => {
   if (typeof value === 'boolean') return value;
   if (typeof value !== 'string') return value;
@@ -42,7 +54,7 @@ const schema = z.object({
   CLOUDINARY_API_KEY: optionalNonEmptyString,
   CLOUDINARY_API_SECRET: optionalNonEmptyString,
 
-  EMAIL_DELIVERY_WEBHOOK_URL: z.string().url().optional(),
+  EMAIL_DELIVERY_WEBHOOK_URL: optionalUrlString,
   EMAIL_DELIVERY_WEBHOOK_SECRET: z.string().optional(),
 
   MARKETPLACE_COMMISSION_PERCENT: z.coerce.number().min(0).max(50).default(10),
@@ -53,7 +65,7 @@ const schema = z.object({
   CJ_BASE_URL: z.string().url().default('https://developers.cjdropshipping.com/api2.0/v1'),
   SYNCEE_ORDERS_URL: z.string().url().default('https://syncee.com'),
   SYNCEE_MODE: z.enum(['manual']).default('manual'),
-  SUPPLIER_FEED_SECRET: z.string().min(24).optional(),
+  SUPPLIER_FEED_SECRET: optionalMin24String,
   AUTO_PRICE_SUPPLIER_FEEDS: booleanFromEnv.default(false),
   CHECKOUT_RESERVATION_MINUTES: z.coerce.number().int().min(5).max(240).default(30),
   BANK_TRANSFER_RESERVATION_HOURS: z.coerce.number().int().min(1).max(168).default(48),

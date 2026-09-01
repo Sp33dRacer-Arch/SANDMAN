@@ -238,8 +238,16 @@ const productSchema = z.object({
   images: z.array(z.object({ url: z.string().url().refine(value => value.startsWith('https://'), 'Image URL must use HTTPS'), alt: z.string().max(240).optional(), position: z.number().int().min(0).max(20).default(0) })).max(8).default([]),
 });
 
+
+function assertConsistentFitmentFlags(requiresFitment: boolean, isUniversal: boolean) {
+  if (requiresFitment === isUniversal) {
+    throw new HttpError(400, 'Choose exactly one fitment mode: vehicle-specific or universal');
+  }
+}
+
 adminRouter.post('/products', asyncHandler(async (req, res) => {
   const data = productSchema.parse(req.body);
+  assertConsistentFitmentFlags(data.requiresFitment, data.isUniversal);
   const { images, ...productData } = data;
   const product = await prisma.product.create({
     data: {
@@ -254,6 +262,9 @@ adminRouter.post('/products', asyncHandler(async (req, res) => {
 adminRouter.patch('/products/:id', asyncHandler(async (req, res) => {
   const data = productSchema.partial().parse(req.body);
   const id = routeParam(req.params.id, 'id');
+  const current = await prisma.product.findUnique({ where: { id }, select: { requiresFitment: true, isUniversal: true } });
+  if (!current) throw new HttpError(404, 'Product not found');
+  assertConsistentFitmentFlags(data.requiresFitment ?? current.requiresFitment, data.isUniversal ?? current.isUniversal);
   const { images, ...productData } = data;
   const product = await prisma.$transaction(async tx => {
     await tx.product.update({ where: { id }, data: productData });

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
@@ -47,19 +48,30 @@ vehiclesRouter.get('/variants/:id', asyncHandler(async (req, res) => {
 }));
 
 vehiclesRouter.get('/search', asyncHandler(async (req, res) => {
-  const { q } = z.object({ q: z.string().min(2).max(80) }).parse(req.query);
-  const variants = await prisma.vehicleVariant.findMany({
-    where: {
+  const { q } = z.object({ q: z.string().trim().min(2).max(100) }).parse(req.query);
+  const tokens = q.split(/\s+/).filter(Boolean).slice(0, 8);
+  const and: Prisma.VehicleVariantWhereInput[] = tokens.map(token => {
+    const year = /^\d{4}$/.test(token) ? Number(token) : null;
+    if (year && year >= 1900 && year <= 2200) {
+      return { yearStart: { lte: year }, yearEnd: { gte: year } };
+    }
+    return {
       OR: [
-        { engineCode: { contains: q, mode: 'insensitive' } },
-        { engineName: { contains: q, mode: 'insensitive' } },
-        { chassisCode: { contains: q, mode: 'insensitive' } },
-        { model: { name: { contains: q, mode: 'insensitive' } } },
-        { model: { make: { name: { contains: q, mode: 'insensitive' } } } },
+        { engineCode: { contains: token, mode: 'insensitive' } },
+        { engineName: { contains: token, mode: 'insensitive' } },
+        { chassisCode: { contains: token, mode: 'insensitive' } },
+        { trim: { contains: token, mode: 'insensitive' } },
+        { model: { name: { contains: token, mode: 'insensitive' } } },
+        { model: { make: { name: { contains: token, mode: 'insensitive' } } } },
       ],
-    },
+    };
+  });
+
+  const variants = await prisma.vehicleVariant.findMany({
+    where: { AND: and },
     include: { model: { include: { make: true } } },
-    take: 30,
+    orderBy: [{ yearStart: 'desc' }, { engineCode: 'asc' }],
+    take: 40,
   });
   res.json(variants);
 }));

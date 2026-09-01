@@ -6,6 +6,7 @@ import { asyncHandler } from '../../lib/async-handler';
 import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
+import { isSandmanCloudinaryUrl } from '../../lib/media-url';
 
 export const reviewsRouter = Router();
 
@@ -13,13 +14,40 @@ reviewsRouter.get('/products/:productId', asyncHandler(async (req, res) => {
   const productId = routeParam(req.params.productId, 'productId');
   const rows = await prisma.productReview.findMany({
     where: { productId, status: 'PUBLISHED' },
-    include: { user: { select: { id: true, firstName: true, lastName: true } } },
+    include: { user: { select: { id: true, firstName: true, lastName: true } }, orderItem: { select: { fitmentSnapshot: true } } },
     orderBy: { createdAt: 'desc' },
     take: 100,
   });
-  const average = rows.length ? rows.reduce((n, row) => n + row.rating, 0) / rows.length : 0;
-  const distribution = [5, 4, 3, 2, 1].map(rating => ({ rating, count: rows.filter(row => row.rating === rating).length }));
-  res.json({ average, count: rows.length, distribution, items: rows });
+  const variantIds = [...new Set(rows.map(row => {
+    const snapshot = row.orderItem?.fitmentSnapshot as { vehicleVariantId?: string } | null;
+    return snapshot?.vehicleVariantId;
+  }).filter((id): id is string => Boolean(id)))];
+  const variants = variantIds.length ? await prisma.vehicleVariant.findMany({
+    where: { id: { in: variantIds } },
+    select: { id: true, yearStart: true, yearEnd: true, trim: true, engineCode: true, model: { select: { name: true, make: { select: { name: true } } } } },
+  }) : [];
+  const variantMap = new Map(variants.map(variant => [variant.id, variant]));
+  const items = rows.map(row => {
+    const snapshot = row.orderItem?.fitmentSnapshot as { vehicleVariantId?: string } | null;
+    return {
+      id: row.id,
+      rating: row.rating,
+      title: row.title,
+      body: row.body,
+      mediaUrls: row.mediaUrls,
+      verifiedPurchase: row.verifiedPurchase,
+      createdAt: row.createdAt,
+      user: { firstName: row.user.firstName, lastName: row.user.lastName },
+      vehicle: snapshot?.vehicleVariantId ? variantMap.get(snapshot.vehicleVariantId) ?? null : null,
+    };
+  });
+  const [aggregate, grouped] = await Promise.all([
+    prisma.productReview.aggregate({ where: { productId, status: 'PUBLISHED' }, _avg: { rating: true }, _count: { rating: true } }),
+    prisma.productReview.groupBy({ where: { productId, status: 'PUBLISHED' }, by: ['rating'], _count: { rating: true } }),
+  ]);
+  const counts = new Map(grouped.map(group => [group.rating, group._count.rating]));
+  const distribution = [5, 4, 3, 2, 1].map(rating => ({ rating, count: counts.get(rating) ?? 0 }));
+  res.json({ average: aggregate._avg.rating ?? 0, count: aggregate._count.rating, distribution, items });
 }));
 
 reviewsRouter.post('/products/:productId', requireAuth, asyncHandler(async (req, res) => {
@@ -29,7 +57,7 @@ reviewsRouter.post('/products/:productId', requireAuth, asyncHandler(async (req,
     rating: z.number().int().min(1).max(5),
     title: z.string().trim().max(120).optional(),
     body: z.string().trim().max(3000).optional(),
-    mediaUrls: z.array(z.string().url()).max(5).default([]),
+    mediaUrls: z.array(z.string().url().refine(isSandmanCloudinaryUrl, 'Review media must use a SANDMAN image upload')).max(5).default([]),
   }).parse(req.body);
 
   const orderItem = await prisma.orderItem.findFirst({
@@ -53,7 +81,15 @@ reviewsRouter.post('/products/:productId', requireAuth, asyncHandler(async (req,
       status: 'PUBLISHED',
     },
   });
-  res.status(201).json(review);
+  res.status(201).json({
+    id: review.id,
+    rating: review.rating,
+    title: review.title,
+    body: review.body,
+    mediaUrls: review.mediaUrls,
+    verifiedPurchase: review.verifiedPurchase,
+    createdAt: review.createdAt,
+  });
 }));
 
 reviewsRouter.get('/sellers/:sellerId', asyncHandler(async (req, res) => {
@@ -76,8 +112,35 @@ reviewsRouter.get('/sellers/:sellerId', asyncHandler(async (req, res) => {
     prisma.orderItem.count({ where: { sellerId, sourceType: 'MARKETPLACE', order: { paymentStatus: { in: ['PAID', 'PARTIALLY_REFUNDED'] } } } }),
   ]);
   if (!seller) throw new HttpError(404, 'Seller not found');
-  const average = reviews.length ? reviews.reduce((n, row) => n + row.rating, 0) / reviews.length : 0;
-  res.json({ seller, average, reviewCount: reviews.length, sold, reviews });
+  const aggregate = await prisma.sellerReview.aggregate({ where: { sellerId, status: 'PUBLISHED' }, _avg: { rating: true }, _count: { rating: true } });
+  const publicSeller = {
+    id: seller.id,
+    firstName: seller.firstName,
+    lastName: seller.lastName,
+    createdAt: seller.createdAt,
+    sellerCountry: seller.sellerCountry,
+    sellerProfile: seller.sellerProfile ? {
+      storeName: seller.sellerProfile.storeName,
+      bio: seller.sellerProfile.bio,
+      location: seller.sellerProfile.location,
+      verified: seller.sellerProfile.verified,
+      responseTimeHours: seller.sellerProfile.responseTimeHours,
+      totalSales: seller.sellerProfile.totalSales,
+      ratingAverage: seller.sellerProfile.ratingAverage,
+      ratingCount: seller.sellerProfile.ratingCount,
+      createdAt: seller.sellerProfile.createdAt,
+    } : null,
+    _count: seller._count,
+  };
+  const publicReviews = reviews.map(review => ({
+    id: review.id,
+    rating: review.rating,
+    body: review.body,
+    verifiedPurchase: review.verifiedPurchase,
+    createdAt: review.createdAt,
+    reviewer: { firstName: review.reviewer.firstName, lastName: review.reviewer.lastName },
+  }));
+  res.json({ seller: publicSeller, average: aggregate._avg.rating ?? 0, reviewCount: aggregate._count.rating, sold, reviews: publicReviews });
 }));
 
 reviewsRouter.post('/sellers/:sellerId', requireAuth, asyncHandler(async (req, res) => {
@@ -101,5 +164,11 @@ reviewsRouter.post('/sellers/:sellerId', requireAuth, asyncHandler(async (req, r
     update: { ratingAverage: aggregate._avg.rating ?? 0, ratingCount: aggregate._count.rating },
     create: { userId: sellerId, ratingAverage: aggregate._avg.rating ?? 0, ratingCount: aggregate._count.rating },
   });
-  res.status(201).json(review);
+  res.status(201).json({
+    id: review.id,
+    rating: review.rating,
+    body: review.body,
+    verifiedPurchase: review.verifiedPurchase,
+    createdAt: review.createdAt,
+  });
 }));

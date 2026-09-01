@@ -11,6 +11,7 @@ import { getStripe } from '../../services/stripe.service';
 import { refundPayPalOrder } from '../../services/paypal.service';
 import { blockMarketplacePayoutsForCase, markMarketplacePayoutReady, prepareMarketplacePayouts, processReadyStripeMarketplacePayouts } from '../../services/marketplace-payout.service';
 import { recomputeOrderFulfillmentStatus, releaseRefundedSupplierReservations } from '../../services/order-lifecycle.service';
+import { isSandmanCloudinaryUrl } from '../../lib/media-url';
 
 export const supportRouter = Router();
 supportRouter.use(requireAuth);
@@ -38,7 +39,7 @@ supportRouter.post('/cases', asyncHandler(async (req, res) => {
     type: z.enum(['RETURN', 'NOT_RECEIVED', 'WRONG_ITEM', 'DAMAGED', 'NOT_AS_DESCRIBED', 'COUNTERFEIT', 'OTHER']),
     reason: z.string().trim().min(5).max(300),
     details: z.string().trim().max(4000).optional(),
-    evidenceUrls: z.array(z.string().url()).max(8).default([]),
+    evidenceUrls: z.array(z.string().url().refine(isSandmanCloudinaryUrl, 'Evidence images must use a SANDMAN image upload')).max(8).default([]),
     requestedRefundCents: z.number().int().positive().optional(),
   }).refine(value => Boolean(value.orderNumber || value.orderId), { message: 'Order number or order id is required' }).parse(req.body);
 
