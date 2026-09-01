@@ -13,6 +13,47 @@ enum UserRole {
   STAFF
 }
 
+
+enum DealerVerificationStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum ReportStatus {
+  OPEN
+  REVIEWING
+  ACTIONED
+  DISMISSED
+}
+
+enum ReportReason {
+  SCAM
+  COUNTERFEIT
+  SEXUAL_CONTENT
+  HATE_ABUSE
+  IMPERSONATION
+  SPAM
+  DANGEROUS_PRODUCT
+  MISLEADING_LISTING
+  STOLEN_IMAGE
+  OTHER
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  FOLLOWERS
+  PRIVATE
+}
+
+enum MessagePrivacy {
+  EVERYONE
+  FOLLOWERS
+  NOBODY
+}
+
 enum ProductStatus {
   DRAFT
   ACTIVE
@@ -148,6 +189,12 @@ model User {
   firstName    String?
   lastName     String?
   phone        String?
+  username     String?   @unique
+  displayName  String?
+  bio          String?
+  avatarUrl    String?
+  bannerUrl    String?
+  country      String?
   role         UserRole  @default(CUSTOMER)
   isActive     Boolean   @default(true)
   createdAt    DateTime  @default(now())
@@ -165,8 +212,18 @@ model User {
   sellerCommissionAcceptedAt DateTime?
   sellerCountry       String?
   emailVerifiedAt     DateTime?
+  phoneVerifiedAt     DateTime?
+  deletionRequestedAt DateTime?
   twoFactorEnabled    Boolean   @default(false)
   twoFactorSecretEnc  String?
+  twoFactorPendingSecretEnc String?
+  twoFactorEnabledAt  DateTime?
+  twoFactorRecoveryCodeHashes Json?
+  profileVisibility   ProfileVisibility @default(PUBLIC)
+  garageVisibility    ProfileVisibility @default(PUBLIC)
+  messagePrivacy      MessagePrivacy @default(EVERYONE)
+  showFollowing       Boolean @default(true)
+  showOnlineStatus    Boolean @default(false)
   sellerProfile       SellerProfile?
   productReviews      ProductReview[]
   sellerReviewsWritten SellerReview[] @relation("SellerReviewWriter")
@@ -185,8 +242,21 @@ model User {
   recentlyViewed     RecentlyViewed[]
   passwordResetTokens PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
+  emailChangeTokens       EmailChangeToken[]
   vehicleRequests VehicleRequest[]
   partRequests    PartRequest[]
+  followers       UserFollow[] @relation("FollowingUser")
+  following       UserFollow[] @relation("FollowerUser")
+  blockedUsers    UserBlock[] @relation("BlockerUser")
+  blockedByUsers  UserBlock[] @relation("BlockedUser")
+  socialPosts     SocialPost[]
+  reportsMade     ContentReport[] @relation("ReportReporter")
+  dealerVerification DealerVerificationApplication? @relation("DealerApplicant")
+  dealerReviews   DealerVerificationApplication[] @relation("DealerReviewer")
+  auditActions    AuditLog[] @relation("AuditActor")
+  securityEvents  SecurityEvent[]
+  phoneVerificationTokens PhoneVerificationToken[]
+  notificationPreference NotificationPreference?
 }
 
 model AuthSession {
@@ -659,6 +729,7 @@ model SellerProfile {
   bio                String?
   location           String?
   verified           Boolean  @default(false)
+  dealerVerifiedAt   DateTime?
   responseTimeHours  Int?
   totalSales          Int      @default(0)
   ratingAverage      Float    @default(0)
@@ -950,12 +1021,30 @@ model EmailVerificationToken {
   id        String   @id @default(cuid())
   userId    String
   tokenHash String   @unique
+  codeHash  String?
+  attempts  Int      @default(0)
   expiresAt DateTime
   usedAt    DateTime?
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, expiresAt])
+}
+
+model EmailChangeToken {
+  id        String   @id @default(cuid())
+  userId    String
+  newEmail  String
+  tokenHash String   @unique
+  codeHash  String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([newEmail, expiresAt])
 }
 
 model RefundRecord {
@@ -990,4 +1079,142 @@ model RecentlyViewed {
 
   @@unique([userId, productId])
   @@index([userId, viewedAt])
+}
+
+model UserFollow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  follower    User     @relation("FollowerUser", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("FollowingUser", fields: [followingId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followingId])
+  @@index([followingId, createdAt])
+  @@index([followerId, createdAt])
+}
+
+model UserBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+  blocker   User     @relation("BlockerUser", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked   User     @relation("BlockedUser", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+model SocialPost {
+  id        String   @id @default(cuid())
+  userId    String
+  body      String
+  mediaUrls Json?
+  status    String   @default("PUBLISHED")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status, createdAt])
+  @@index([status, createdAt])
+}
+
+model DealerVerificationApplication {
+  id                 String                   @id @default(cuid())
+  userId             String                   @unique
+  businessName       String
+  registrationNumber String?
+  country            String
+  address            String?
+  website            String?
+  businessEmail      String
+  phone              String?
+  description        String?
+  documentUrls       Json?
+  status             DealerVerificationStatus @default(PENDING)
+  reviewerId         String?
+  reviewNotes        String?
+  submittedAt        DateTime                 @default(now())
+  reviewedAt         DateTime?
+  updatedAt          DateTime                 @updatedAt
+  user               User                     @relation("DealerApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer           User?                    @relation("DealerReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+
+  @@index([status, submittedAt])
+}
+
+model ContentReport {
+  id             String       @id @default(cuid())
+  reporterId     String
+  reason         ReportReason
+  details        String?
+  targetType     String
+  targetId       String
+  status         ReportStatus @default(OPEN)
+  moderatorId    String?
+  moderatorNotes String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  reporter       User         @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@index([reporterId, createdAt])
+}
+
+model NotificationPreference {
+  id                       String  @id @default(cuid())
+  userId                   String  @unique
+  inAppFollowers           Boolean @default(true)
+  inAppFollowingActivity   Boolean @default(true)
+  inAppMessages            Boolean @default(true)
+  inAppMarketplace         Boolean @default(true)
+  inAppOrders              Boolean @default(true)
+  emailFollowingActivity   Boolean @default(false)
+  emailMessages            Boolean @default(true)
+  emailMarketplace         Boolean @default(true)
+  emailOrders              Boolean @default(true)
+  emailSecurity            Boolean @default(true)
+  user                     User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PhoneVerificationToken {
+  id        String   @id @default(cuid())
+  userId    String
+  codeHash  String
+  expiresAt DateTime
+  usedAt    DateTime?
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+}
+
+model SecurityEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  ipAddress String?
+  userAgent String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  action      String
+  targetType  String
+  targetId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  actor       User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([actorUserId, createdAt])
 }

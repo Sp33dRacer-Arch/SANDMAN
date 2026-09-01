@@ -5,15 +5,32 @@ export type SandmanEmail = {
   subject: string;
   text: string;
   html?: string;
-  type: 'VERIFY_EMAIL' | 'PASSWORD_RESET' | 'ORDER' | 'SHIPPING' | 'ALERT' | 'GENERIC';
+  type: 'VERIFY_EMAIL' | 'PASSWORD_RESET' | 'ORDER' | 'SHIPPING' | 'ALERT' | 'SECURITY' | 'GENERIC';
 };
 
-/**
- * Provider-neutral delivery hook. Point EMAIL_DELIVERY_WEBHOOK_URL at your
- * Resend/Postmark/SendGrid worker. SANDMAN never exposes reset tokens in API responses.
- */
-export async function sendEmail(message: SandmanEmail) {
-  if (!env.EMAIL_DELIVERY_WEBHOOK_URL) return { delivered: false, reason: 'EMAIL_DELIVERY_WEBHOOK_URL is not configured' };
+async function sendViaResend(message: SandmanEmail) {
+  if (!env.RESEND_API_KEY) return null;
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: env.EMAIL_FROM,
+      to: [message.to],
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      headers: { 'X-SANDMAN-Message-Type': message.type },
+    }),
+  });
+  if (!response.ok) throw new Error(`Resend returned ${response.status}`);
+  return { delivered: true, provider: 'resend' as const };
+}
+
+async function sendViaWebhook(message: SandmanEmail) {
+  if (!env.EMAIL_DELIVERY_WEBHOOK_URL) return null;
   const response = await fetch(env.EMAIL_DELIVERY_WEBHOOK_URL, {
     method: 'POST',
     headers: {
@@ -23,5 +40,17 @@ export async function sendEmail(message: SandmanEmail) {
     body: JSON.stringify(message),
   });
   if (!response.ok) throw new Error(`Email delivery webhook returned ${response.status}`);
-  return { delivered: true };
+  return { delivered: true, provider: 'webhook' as const };
+}
+
+/**
+ * Verification/security mail delivery. Configure Resend directly on Railway,
+ * or keep using the signed provider-neutral webhook bridge.
+ */
+export async function sendEmail(message: SandmanEmail) {
+  const resend = await sendViaResend(message);
+  if (resend) return resend;
+  const webhook = await sendViaWebhook(message);
+  if (webhook) return webhook;
+  return { delivered: false, reason: 'No email provider configured' };
 }

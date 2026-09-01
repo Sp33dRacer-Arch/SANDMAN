@@ -15,7 +15,8 @@ import {
 } from '../../services/stripe.service';
 import { markMarketplacePayoutReady, processReadyStripeMarketplacePayouts } from '../../services/marketplace-payout.service';
 import { recomputeOrderFulfillmentStatus } from '../../services/order-lifecycle.service';
-import { createNotification } from '../../services/notification.service';
+import { createNotification, notifyFollowers } from '../../services/notification.service';
+import { assertSafeImageUrls, moderateTextLocal } from '../../services/content-moderation.service';
 import { sendEmail } from '../../services/email.service';
 import { publicProduct } from '../../lib/public-product';
 
@@ -280,6 +281,7 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
   }).parse(req.body);
   const seller = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
   if (!seller) throw new HttpError(404, 'Seller account not found');
+  if (!seller.emailVerifiedAt) throw new HttpError(403, 'Verify your email before selling on SANDMAN');
   if (!seller.sellerCommissionAcceptedAt) {
     await prisma.user.update({ where: { id: seller.id }, data: { sellerCommissionAcceptedAt: new Date() } });
   }
@@ -290,7 +292,15 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
   const category = await prisma.category.findUnique({ where: { id: data.categoryId } });
   if (!category) throw new HttpError(400, 'Invalid category');
 
-  const { images, fitmentVehicleVariantIds, commissionAccepted: _commissionAccepted, publish, ...listing } = data;
+  const { images, fitmentVehicleVariantIds, commissionAccepted: _commissionAccepted, publish, ...listingRaw } = data;
+  const safeImageUrls = await assertSafeImageUrls(images.map(image => image.url), 'MARKETPLACE_LISTING', req.auth!.userId);
+  const safeImages = images.map(image => ({ ...image, url: safeImageUrls.find(url => url === image.url) || image.url }));
+  const listing = {
+    ...listingRaw,
+    name: moderateTextLocal(listingRaw.name, 'Listing name'),
+    description: moderateTextLocal(listingRaw.description, 'Listing description'),
+    shortDesc: listingRaw.shortDesc ? moderateTextLocal(listingRaw.shortDesc, 'Listing summary') : listingRaw.shortDesc,
+  };
   assertFitmentMode(listing.requiresFitment, listing.isUniversal);
   const requestedFitmentIds = listing.isUniversal ? [] : await validatedFitmentIds(fitmentVehicleVariantIds);
   const canPublish = Boolean(seller.stripeConnectAccountId && seller.stripeConnectPayoutsEnabled);
@@ -306,7 +316,7 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
       status,
       currency: 'USD',
       taxable: true,
-      images: { create: images },
+      images: { create: safeImages },
       fitments: { create: requestedFitmentIds.map(vehicleVariantId => ({ vehicleVariantId })) },
     },
     include: {
@@ -315,6 +325,11 @@ marketplaceRouter.post('/', requireAuth, asyncHandler(async (req, res) => {
       seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
     },
   });
+
+  if (product.status === 'ACTIVE') {
+    const actor = seller.displayName || seller.username || seller.firstName || 'A seller you follow';
+    await notifyFollowers({ actorUserId: seller.id, type: 'FOLLOWING_LISTING', title: `${actor} listed a new part`, body: product.name, link: `#/product/${encodeURIComponent(product.slug)}` }).catch(() => undefined);
+  }
 
   res.status(201).json({
     ...product,
@@ -331,9 +346,17 @@ marketplaceRouter.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
   });
   if (!existing) throw new HttpError(404, 'Listing not found');
 
-  const data = listingSchema.partial().extend({
+  const parsed = listingSchema.partial().extend({
     status: z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional(),
   }).parse(req.body);
+  const data: typeof parsed = { ...parsed };
+  if (data.name) data.name = moderateTextLocal(data.name, 'Listing name');
+  if (data.description) data.description = moderateTextLocal(data.description, 'Listing description');
+  if (data.shortDesc) data.shortDesc = moderateTextLocal(data.shortDesc, 'Listing summary');
+  if (data.images) {
+    const safe = await assertSafeImageUrls(data.images.map(image => image.url), 'MARKETPLACE_LISTING', req.auth!.userId);
+    data.images = data.images.map(image => ({ ...image, url: safe.find(url => url === image.url) || image.url }));
+  }
 
   if (data.categoryId && data.categoryId !== existing.categoryId) {
     const category = await prisma.category.findUnique({ where: { id: data.categoryId }, select: { id: true } });
@@ -344,8 +367,9 @@ marketplaceRouter.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
   if (nextStatus === 'ACTIVE') {
     const seller = await prisma.user.findUnique({
       where: { id: req.auth!.userId },
-      select: { stripeConnectAccountId: true, stripeConnectPayoutsEnabled: true },
+      select: { stripeConnectAccountId: true, stripeConnectPayoutsEnabled: true, emailVerifiedAt: true },
     });
+    if (!seller?.emailVerifiedAt) throw new HttpError(403, 'Verify your email before publishing a listing');
     if (!seller?.stripeConnectAccountId || !seller.stripeConnectPayoutsEnabled) {
       throw new HttpError(409, 'Complete seller payout verification before publishing this listing');
     }
@@ -407,6 +431,13 @@ marketplaceRouter.patch('/:id', requireAuth, asyncHandler(async (req, res) => {
       },
     });
   });
+  if (product && existing.status !== 'ACTIVE' && product.status === 'ACTIVE') {
+    const seller = await prisma.user.findUnique({ where: { id: req.auth!.userId }, select: { id:true, username:true, displayName:true, firstName:true } });
+    if (seller) {
+      const actor = seller.displayName || seller.username || seller.firstName || 'A seller you follow';
+      await notifyFollowers({ actorUserId: seller.id, type:'FOLLOWING_LISTING', title:`${actor} listed a new part`, body:product.name, link:`#/product/${encodeURIComponent(product.slug)}` }).catch(()=>undefined);
+    }
+  }
   res.json(product);
 }));
 

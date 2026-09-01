@@ -51,7 +51,7 @@ export function verifyTotp(secret: string, code: string) {
 }
 
 function key() {
-  return createHash('sha256').update(env.JWT_SECRET).digest();
+  return createHash('sha256').update(env.TOTP_ENCRYPTION_KEY || env.JWT_SECRET).digest();
 }
 
 export function encryptTotpSecret(secret: string) {

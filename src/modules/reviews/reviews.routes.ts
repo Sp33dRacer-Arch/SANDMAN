@@ -7,6 +7,7 @@ import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 import { isSandmanCloudinaryUrl } from '../../lib/media-url';
+import { assertSafeImageUrls, moderateTextLocal } from '../../services/content-moderation.service';
 
 export const reviewsRouter = Router();
 
@@ -68,15 +69,16 @@ reviewsRouter.post('/products/:productId', requireAuth, asyncHandler(async (req,
   const existing = await prisma.productReview.findUnique({ where: { orderItemId: body.orderItemId } });
   if (existing) throw new HttpError(409, 'This purchase has already been reviewed');
 
+  const safeMedia = await assertSafeImageUrls(body.mediaUrls, 'PRODUCT_REVIEW', req.auth!.userId);
   const review = await prisma.productReview.create({
     data: {
       userId: req.auth!.userId,
       productId,
       orderItemId: body.orderItemId,
       rating: body.rating,
-      title: body.title,
-      body: body.body,
-      mediaUrls: body.mediaUrls as Prisma.InputJsonValue,
+      title: body.title ? moderateTextLocal(body.title, 'Review title') : undefined,
+      body: body.body ? moderateTextLocal(body.body, 'Review') : undefined,
+      mediaUrls: safeMedia as Prisma.InputJsonValue,
       verifiedPurchase: true,
       status: 'PUBLISHED',
     },
@@ -155,7 +157,7 @@ reviewsRouter.post('/sellers/:sellerId', requireAuth, asyncHandler(async (req, r
   if (await prisma.sellerReview.findUnique({ where: { orderItemId: body.orderItemId } })) throw new HttpError(409, 'This seller transaction has already been reviewed');
 
   const review = await prisma.sellerReview.create({
-    data: { reviewerId: req.auth!.userId, sellerId, orderItemId: body.orderItemId, rating: body.rating, body: body.body },
+    data: { reviewerId: req.auth!.userId, sellerId, orderItemId: body.orderItemId, rating: body.rating, body: body.body ? moderateTextLocal(body.body, 'Seller review') : undefined },
   });
 
   const aggregate = await prisma.sellerReview.aggregate({ where: { sellerId, status: 'PUBLISHED' }, _avg: { rating: true }, _count: { rating: true } });

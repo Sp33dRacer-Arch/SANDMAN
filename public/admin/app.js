@@ -267,6 +267,7 @@
       else if (view === 'fulfillment') await renderFulfillment();
       else if (view === 'operations') await renderOperations();
       else if (view === 'customers') await renderCustomers();
+      else if (view === 'trust') await renderTrust();
       else if (view === 'settings') await renderSettings();
     } catch (error) {
       viewRoot.innerHTML = `<div class="empty-state"><div><b>Could not load this page</b><span>${esc(error.message)}</span></div></div>`;
@@ -599,6 +600,22 @@
       <div class="modal-footer"><select id="support-case-status" style="width:auto">${['OPEN','UNDER_REVIEW','AWAITING_SELLER','APPROVED','RESOLVED','REJECTED','CLOSED'].map(v => `<option value="${v}" ${item.status === v ? 'selected' : ''}>${v.replaceAll('_',' ')}</option>`).join('')}</select><button class="btn" data-action="save-case-status" data-id="${esc(item.id)}">Update case</button>${canRefund ? `<button class="btn btn-danger" data-action="refund-case" data-id="${esc(item.id)}" data-max="${esc(item.order.totalCents)}">Issue refund</button>` : ''}</div>`);
   }
 
+  async function renderTrust() {
+    heading('Trust & Safety', 'Dealer verification, user reports, security events and moderator audit history.');
+    const [summary, dealers, reports, events, riskUsers] = await Promise.all([
+      api('/api/admin/trust/summary'),
+      api('/api/admin/trust/dealer-verifications?status=PENDING').catch(() => []),
+      api('/api/admin/trust/reports?status=OPEN').catch(() => []),
+      api('/api/admin/trust/security-events').catch(() => []),
+      api('/api/admin/trust/risk-users').catch(() => []),
+    ]);
+    $('#nav-trust-count').textContent = summary.openReports + summary.pendingDealers || '';
+    const dealerRows = dealers.length ? dealers.map(item => `<tr><td><strong>${esc(item.businessName)}</strong><small>${esc(item.country)} · ${esc(item.businessEmail)}</small></td><td>${esc(item.user.email)}</td><td>${badge(item.status)}</td><td class="text-right"><button class="table-action" data-action="dealer-review" data-id="${esc(item.id)}" data-decision="APPROVED">Approve</button> <button class="table-action danger" data-action="dealer-review" data-id="${esc(item.id)}" data-decision="REJECTED">Reject</button></td></tr>`).join('') : '<tr><td colspan="4">No pending dealer applications.</td></tr>';
+    const reportRows = reports.length ? reports.map(item => `<tr><td>${badge(item.reason)}</td><td><strong>${esc(item.targetType)}</strong><small>${esc(item.targetId)}</small></td><td>${esc(item.reporter.email)}</td><td class="text-right"><button class="table-action" data-action="report-review" data-id="${esc(item.id)}">Review</button></td></tr>`).join('') : '<tr><td colspan="4">No open reports.</td></tr>';
+    const riskRows = riskUsers.filter(item => item.level !== 'LOW').slice(0,25).map(item => `<tr><td><strong>${esc(item.displayName||item.username||item.email)}</strong><small>${esc(item.email)}</small></td><td>${badge(item.level)}</td><td><strong>${esc(item.score)}</strong><small>/ 100</small></td><td>${esc((item.reasons||[]).slice(0,3).join(' · ')||'No elevated signals')}</td></tr>`).join('') || '<tr><td colspan="4">No medium/high-risk accounts in the current sample.</td></tr>';
+    viewRoot.innerHTML = `<section class="metric-grid">${metric('Open reports',summary.openReports,'Awaiting moderation','!')}${metric('Dealer reviews',summary.pendingDealers,'Pending verification','✓')}${metric('Security events',summary.securityEvents24h,'Last 24 hours','⌁')}${metric('Audit actions',summary.auditActions24h,'Last 24 hours','▤')}</section><section class="data-panel"><div class="panel-header"><h2>Pending dealer verification</h2><span class="subtle">EMAIL + PHONE + 2FA REQUIRED</span></div><div class="table-wrap"><table class="responsive-table"><thead><tr><th>Business</th><th>Account</th><th>Status</th><th class="text-right">Decision</th></tr></thead><tbody>${dealerRows}</tbody></table></div></section><section class="data-panel"><div class="panel-header"><h2>Open content reports</h2><span class="subtle">TRUST & SAFETY QUEUE</span></div><div class="table-wrap"><table class="responsive-table"><thead><tr><th>Reason</th><th>Target</th><th>Reporter</th><th class="text-right">Action</th></tr></thead><tbody>${reportRows}</tbody></table></div></section><section class="data-panel"><div class="panel-header"><h2>Elevated account risk</h2><span class="subtle">HEURISTIC — REVIEW, DON'T AUTO-BAN</span></div><div class="table-wrap"><table class="responsive-table"><thead><tr><th>Account</th><th>Level</th><th>Score</th><th>Signals</th></tr></thead><tbody>${riskRows}</tbody></table></div></section><section class="panel panel-pad"><div class="panel-header"><h2>Recent security signals</h2></div><div class="alert-list">${events.slice(0,15).map(e=>`<div class="alert-row"><div><strong>${esc(e.type.replaceAll('_',' '))}</strong><small>${esc(e.user?.email||'Unknown user')} · ${esc(shortDate(e.createdAt))}</small></div><span>${esc(e.ipAddress||'—')}</span></div>`).join('')||'<div class="empty-state"><div><b>No security events</b></div></div>'}</div></section>`;
+  }
+
   async function renderSettings() {
     heading('Settings', 'Production security, payments, marketplace payouts and supplier integrations.');
     const [health, config] = await Promise.all([api('/api/health'), api('/api/admin/settings')]);
@@ -894,7 +911,16 @@
       else if (action === 'add-vehicle') await openVehicleModal();
       else if (action === 'add-model') await openVehicleModelModal();
       else if (action === 'manage-fitments') await openFitmentModal(actionEl.dataset.id);
-      else if (action === 'archive-product') {
+      else if (action === 'dealer-review') {
+        const notes = prompt(`Moderator notes for ${actionEl.dataset.decision.toLowerCase()} decision (optional):`) || undefined;
+        await api(`/api/admin/trust/dealer-verifications/${actionEl.dataset.id}`, { method:'PATCH', body:JSON.stringify({ status:actionEl.dataset.decision, reviewNotes:notes }) });
+        toast('Dealer verification updated', actionEl.dataset.decision); await renderTrust();
+      } else if (action === 'report-review') {
+        const enforcement = prompt('Enforcement: NONE, SUSPEND_USER, REMOVE_POST, or ARCHIVE_LISTING', 'NONE')?.trim().toUpperCase() || 'NONE';
+        const notes = prompt('Moderator notes (optional):') || undefined;
+        await api(`/api/admin/trust/reports/${actionEl.dataset.id}`, { method:'PATCH', body:JSON.stringify({ status:'ACTIONED', action:enforcement, moderatorNotes:notes }) });
+        toast('Report actioned', enforcement); await renderTrust();
+      } else if (action === 'archive-product') {
         if (confirm('Archive this product? It will stop appearing in the active catalogue.')) {
           await api(`/api/admin/products/${actionEl.dataset.id}`, { method: 'DELETE' });
           closeModal(); toast('Product archived'); await renderProducts();

@@ -7,6 +7,8 @@ import { routeParam } from '../../lib/route-param';
 import { optionalAuth, requireAuth } from '../../middleware/auth';
 import { evaluateFitment } from '../../services/fitment.service';
 import { publicProduct } from '../../lib/public-product';
+import { moderateTextLocal } from '../../services/content-moderation.service';
+import { notifyFollowers } from '../../services/notification.service';
 
 export const buildsRouter = Router();
 
@@ -78,7 +80,9 @@ buildsRouter.post('/', asyncHandler(async (req, res) => {
   }
   if (body.vehicleVariantId && !(await prisma.vehicleVariant.findUnique({ where: { id: body.vehicleVariantId } }))) throw new HttpError(404, 'Vehicle variant not found');
 
-  const build = await prisma.build.create({ data: { ...body, userId: req.auth!.userId }, include: buildWithItems() });
+  const safeBody = { ...body, name: moderateTextLocal(body.name, 'Build name'), goal: body.goal ? moderateTextLocal(body.goal, 'Build goal') : undefined, notes: body.notes ? moderateTextLocal(body.notes, 'Build notes') : undefined };
+  const build = await prisma.build.create({ data: { ...safeBody, userId: req.auth!.userId }, include: buildWithItems() });
+  if (build.isPublic) await notifyFollowers({ actorUserId:req.auth!.userId, type:'FOLLOWING_BUILD', title:'New public build', body:`A person you follow published ${build.name}.`, link:`#/public-build/${build.id}` }).catch(()=>undefined);
   res.status(201).json(summarize(build));
 }));
 
@@ -101,7 +105,12 @@ buildsRouter.patch('/:id', asyncHandler(async (req, res) => {
     notes: z.string().max(2000).nullable().optional(),
     isPublic: z.boolean().optional(),
   }).parse(req.body);
-  const build = await prisma.build.update({ where: { id }, data: body, include: buildWithItems() });
+  const safeBody:any = { ...body };
+  if (body.name) safeBody.name = moderateTextLocal(body.name, 'Build name');
+  if (body.goal) safeBody.goal = moderateTextLocal(body.goal, 'Build goal');
+  if (body.notes) safeBody.notes = moderateTextLocal(body.notes, 'Build notes');
+  const build = await prisma.build.update({ where: { id }, data: safeBody, include: buildWithItems() });
+  if (build.isPublic && (!existing.isPublic || body.name || body.goal || body.notes)) await notifyFollowers({ actorUserId:req.auth!.userId, type:'FOLLOWING_BUILD', title:existing.isPublic?'Build updated':'New public build', body:`A person you follow ${existing.isPublic?'updated':'published'} ${build.name}.`, link:`#/public-build/${build.id}` }).catch(()=>undefined);
   res.json(summarize(build));
 }));
 

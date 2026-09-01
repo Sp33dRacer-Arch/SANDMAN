@@ -29,6 +29,8 @@ import { opsRouter } from './modules/ops/ops.routes';
 import { supplierFeedRouter } from './modules/supplier-feed/supplier-feed.routes';
 import { v2Router } from './modules/v2/v2.routes';
 import { uploadsRouter } from './modules/uploads/uploads.routes';
+import { socialRouter } from './modules/social/social.routes';
+import { trustRouter, adminTrustRouter } from './modules/trust/trust.routes';
 import { prisma } from './lib/prisma';
 import { asyncHandler } from './lib/async-handler';
 
@@ -59,11 +61,20 @@ app.use(express.urlencoded({ extended: true }));
 app.use(rateLimit({ windowMs: 60_000, limit: 180, standardHeaders: 'draft-8', legacyHeaders: false }));
 
 // Authentication endpoints need a much tighter ceiling than normal browsing.
+const registerLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 5, standardHeaders: 'draft-8', legacyHeaders: false });
 const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: 'draft-8', legacyHeaders: false });
 const recoveryLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 10, standardHeaders: 'draft-8', legacyHeaders: false });
+const verificationLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 8, standardHeaders: 'draft-8', legacyHeaders: false });
+const twoFactorLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 15, standardHeaders: 'draft-8', legacyHeaders: false });
+app.use('/api/auth/register', registerLimiter);
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/forgot-password', recoveryLimiter);
 app.use('/api/auth/reset-password', recoveryLimiter);
+app.use('/api/auth/email-verification', verificationLimiter);
+app.use('/api/auth/phone-verification', verificationLimiter);
+app.use('/api/auth/email-change', verificationLimiter);
+app.use('/api/auth/account', recoveryLimiter);
+app.use('/api/security/2fa', twoFactorLimiter);
 
 const adminUiDir = path.join(process.cwd(), 'public', 'admin');
 const storeUiDir = path.join(process.cwd(), 'public', 'store');
@@ -75,7 +86,7 @@ app.use('/assets', express.static(path.join(storeUiDir, 'assets')));
 app.get('/api', (_req, res) => res.json({
   name: 'SANDMAN',
   description: 'Automotive parts marketplace, builds, fitment, dropshipping and seller platform',
-  version: '2.3.0',
+  version: '2.4.1',
   health: '/api/health',
   admin: '/admin',
   storefront: '/',
@@ -162,13 +173,16 @@ app.use('/api/builds', buildsRouter);
 app.use('/api/community', communityRouter);
 app.use('/api/support', supportRouter);
 app.use('/api/security', securityRouter);
+app.use('/api/social', socialRouter);
+app.use('/api/trust', trustRouter);
+app.use('/api/admin/trust', adminTrustRouter);
 app.use('/api/admin/ops', opsRouter);
 app.use('/api/supplier-feed', supplierFeedRouter);
 app.use('/api/v2', v2Router);
 
 // History-API storefront routes. Old #/ links remain supported by the browser router,
 // but public/canonical URLs use normal paths so products and landing pages are crawlable.
-const storefrontRoute = /^\/(?:shop|vehicles|vehicle-finder|build-advisor|advisor|requests|garage|builds(?:\/[^/]+)?|public-builds\/[^/]+|compare|wishlist|messages|sellers\/[^/]+|sell|seller|account|notifications|checkout|orders\/[^/]+|returns-center|buyer-protection|shipping|returns|terms|privacy|about|verify-email|reset-password|marketplace)\/?$/;
+const storefrontRoute = /^\/(?:shop|vehicles|vehicle-finder|build-advisor|advisor|requests|garage|builds(?:\/[^/]+)?|public-builds\/[^/]+|compare|wishlist|messages|sellers\/[^/]+|sell|seller|account|notifications|feed|profile\/[^/]+|checkout|orders\/[^/]+|returns-center|buyer-protection|shipping|returns|terms|privacy|about|verify-email|email-change|reset-password|marketplace)\/?$/;
 app.get(storefrontRoute, (_req, res) => sendStorefront(res));
 
 app.use(notFound);

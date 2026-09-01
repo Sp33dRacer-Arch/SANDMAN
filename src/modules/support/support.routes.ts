@@ -12,6 +12,7 @@ import { refundPayPalOrder } from '../../services/paypal.service';
 import { blockMarketplacePayoutsForCase, markMarketplacePayoutReady, prepareMarketplacePayouts, processReadyStripeMarketplacePayouts } from '../../services/marketplace-payout.service';
 import { recomputeOrderFulfillmentStatus, releaseRefundedSupplierReservations } from '../../services/order-lifecycle.service';
 import { isSandmanCloudinaryUrl } from '../../lib/media-url';
+import { assertSafeImageUrls, moderateTextLocal } from '../../services/content-moderation.service';
 
 export const supportRouter = Router();
 supportRouter.use(requireAuth);
@@ -57,6 +58,10 @@ supportRouter.post('/cases', asyncHandler(async (req, res) => {
   const maxRefund = orderItem ? itemNetPaidCents(orderItem) : order.totalCents;
   if (body.requestedRefundCents && body.requestedRefundCents > maxRefund) throw new HttpError(400, 'Requested refund is higher than the eligible item/order value');
 
+  const evidenceUrls = await assertSafeImageUrls(body.evidenceUrls, 'SUPPORT_EVIDENCE', req.auth!.userId);
+  const reason = moderateTextLocal(body.reason, 'Case reason');
+  const details = body.details ? moderateTextLocal(body.details, 'Case details') : undefined;
+
   const supportCase = await prisma.supportCase.create({
     data: {
       userId: req.auth!.userId,
@@ -64,9 +69,9 @@ supportRouter.post('/cases', asyncHandler(async (req, res) => {
       orderItemId: orderItem?.id,
       sellerId: orderItem?.sellerId,
       type: body.type,
-      reason: body.reason,
-      details: body.details,
-      evidenceUrls: body.evidenceUrls as Prisma.InputJsonValue,
+      reason,
+      details,
+      evidenceUrls: evidenceUrls as Prisma.InputJsonValue,
       requestedRefundCents: body.requestedRefundCents,
     },
   });
@@ -99,6 +104,7 @@ supportRouter.get('/seller/cases', asyncHandler(async (req, res) => {
 supportRouter.post('/seller/cases/:id/respond', asyncHandler(async (req, res) => {
   const id = routeParam(req.params.id, 'id');
   const body = z.object({ response: z.string().trim().min(5).max(4000) }).parse(req.body);
+  const safeResponse = moderateTextLocal(body.response, 'Case response');
   const supportCase = await prisma.supportCase.findFirst({ where: { id, sellerId: req.auth!.userId } });
   if (!supportCase) throw new HttpError(404, 'Case not found');
   if (['RESOLVED', 'CLOSED', 'REJECTED'].includes(supportCase.status)) throw new HttpError(409, 'This case is already closed');
@@ -106,7 +112,7 @@ supportRouter.post('/seller/cases/:id/respond', asyncHandler(async (req, res) =>
   const updated = await prisma.supportCase.update({
     where: { id },
     data: {
-      sellerResponse: body.response,
+      sellerResponse: safeResponse,
       sellerRespondedAt: new Date(),
       status: supportCase.status === 'APPROVED' ? 'APPROVED' : 'UNDER_REVIEW',
     },

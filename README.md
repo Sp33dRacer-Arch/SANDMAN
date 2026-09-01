@@ -1,8 +1,24 @@
-# SANDMAN V2.3
+# SANDMAN V2.4.1 — Security, Identity, Social & Mobile
 
 SANDMAN is a custom automotive-parts commerce platform: storefront, marketplace, My Garage, exact vehicle fitment, builds, supplier routing, checkout, payments, reviews, support and admin operations.
 
-V2.3 keeps the vehicle as a first-class part of shopping and adds a growth/trust layer: clean public URLs, VIN-assisted vehicle resolution, ranked search, delivery estimates and tracking, seller reputation, verified photo reviews, returns/buyer-protection workflows, and stronger Garage personalization.
+V2.4.1 builds on V2.3 with account security, identity/dealer verification, social profiles and following, in-site/email notifications, content safety, Trust & Safety administration, account privacy/data controls, and a mobile-first light/dark interface hardening pass.
+
+## V2.4 / V2.4.1 highlights
+
+- Email verification with 6-digit code + secure link; Resend or signed delivery-webhook support.
+- Phone verification with 6-digit SMS OTP; Twilio or signed SMS-webhook support.
+- Rebuilt authenticator-app 2FA: QR setup, hidden manual setup key, first-code confirmation before activation, and 10 one-time recovery codes.
+- Active-device/session management, security events, new-device alerts, rate limits and temporary per-account/network sign-in throttling.
+- Secure email-change flow, data export, account deactivation/deletion request, and session revocation for sensitive changes.
+- Dealer verification with verified-email + verified-phone + 2FA prerequisites and manual admin review.
+- Unique/reserved usernames, Unicode-safe personal-name validation, anti-impersonation signals and verified-dealer badges.
+- Public profiles, follow/unfollow, block/report, social posts, Following feed, and notification preferences.
+- Followers receive on-site activity alerts; optional email alerts use absolute SANDMAN links. The storefront refreshes the notification count while open.
+- User-generated image safety hooks on profile media, posts, marketplace listings, reviews, support evidence and dealer documents. Production image publication fails closed until a moderation scanner is configured.
+- Trust & Safety admin screens for reports, dealer applications, security events, audits and heuristic account-risk review.
+- Light-mode repair and mobile-first layouts for account security, verification, profiles, feed, notifications, modals, QR/recovery codes and admin Trust & Safety.
+
 
 ## V2.3 highlights
 
@@ -76,19 +92,21 @@ npm test
 npm run build
 ```
 
-Or run:
+Or run the V2.4.1 step-by-step verifier (recommended on Windows):
 
 ```powershell
-.\VERIFY-V2.3.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.4.1.ps1"
 ```
 
 Never commit `.env`.
 
 ## Database migration
 
-V2.3 adds **no new Prisma schema or migration**. It reuses the existing V2.2/V2.0 data model. The latest automotive-core migration already present is:
+V2.4.1 ships the V2.4 additive migration:
 
-`prisma/migrations/20260831110000_v20_vehicle_fitment_requests/migration.sql`
+`prisma/migrations/20260901143000_v24_security_identity_social/migration.sql`
+
+It adds profile/social identity fields, follows/blocks/posts, dealer verification, reports, notification preferences, phone verification, security/audit events, email-change tokens, recovery-code state and account-deactivation state. Existing V2.3 commerce/vehicle data is preserved.
 
 For production/Railway use **deploy**, not development migration commands:
 
@@ -118,7 +136,7 @@ Only expand to the full catalogue after the BMW smoke test succeeds.
 
 ## Still external / later-stage work
 
-V2.3 still does not pretend to include services that require external providers or validated engineering data. You still need real supplier/API credentials, Stripe/PayPal configuration, outbound email, Cloudinary/object storage and operational/legal setup. NHTSA VIN decoding is assistive only and never replaces SANDMAN fitment evidence. A generative AI mechanic, OEM diagram licensing and 3D engineering simulation remain later phases.
+V2.4.1 does not invent third-party credentials. You still need real supplier/API credentials, Stripe/PayPal configuration, Cloudinary/object storage, a Resend or email-webhook credential for real verification mail, Twilio or an SMS webhook for phone OTPs, and an image-moderation provider/webhook for production user-generated images, plus operational/legal setup. NHTSA VIN decoding is assistive only and never replaces SANDMAN fitment evidence. A generative AI mechanic, OEM diagram licensing and 3D engineering simulation remain later phases.
 
 ## Production safety
 

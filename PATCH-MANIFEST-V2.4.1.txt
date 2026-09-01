@@ -1,0 +1,48 @@
+SANDMAN V2.4.1 SCAN-FIXED PATCH MANIFEST
+Base: SANDMAN V2.3 FIXED
+
+Changed/new files: 40
+New files: 16
+Modified files: 24
+Deleted files: 0
+
+.env.example
+CHANGELOG-V2.4.1.md
+INSTALL-V2.4.1.txt
+PATCH-MANIFEST-V2.4.1.txt
+RAILWAY-V2.4.1-ENV.txt
+README.md
+STATIC-AUDIT-V2.4.1-FINAL.txt
+VERIFY-V2.4.1.ps1
+package.json
+prisma/migrations/20260901143000_v24_security_identity_social/migration.sql
+prisma/schema.prisma
+public/admin/app.js
+public/admin/index.html
+public/admin/styles.css
+public/store/app.js
+public/store/index.html
+public/store/styles.css
+scripts/static-v24-audit.mjs
+src/app.ts
+src/config/env.ts
+src/modules/auth/auth.routes.ts
+src/modules/builds/builds.routes.ts
+src/modules/community/community.routes.ts
+src/modules/marketplace/marketplace.routes.ts
+src/modules/reviews/reviews.routes.ts
+src/modules/security/security.routes.ts
+src/modules/social/social.routes.ts
+src/modules/support/support.routes.ts
+src/modules/trust/trust.routes.ts
+src/modules/uploads/uploads.routes.ts
+src/modules/v2/v2.routes.ts
+src/services/audit.service.ts
+src/services/content-moderation.service.ts
+src/services/email.service.ts
+src/services/notification.service.ts
+src/services/risk-score.service.ts
+src/services/sms.service.ts
+src/services/totp.service.ts
+src/services/two-factor.service.ts
+tests/risk-score.test.ts

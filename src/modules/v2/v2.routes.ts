@@ -73,7 +73,7 @@ v2Router.get('/catalog/status', asyncHandler(async (_req, res) => {
     prisma.productFitment.count(),
     prisma.supplier.count({ where: { active: true } }),
   ]);
-  res.json({ version: '2.3.0', vehicles: { makes, models, variants }, products: { total: products, active: activeProducts }, fitments: { total: fitments, verified: verifiedFitments }, activeSuppliers: suppliers });
+  res.json({ version: '2.4.1', vehicles: { makes, models, variants }, products: { total: products, active: activeProducts }, fitments: { total: fitments, verified: verifiedFitments }, activeSuppliers: suppliers });
 }));
 
 
@@ -265,17 +265,17 @@ v2Router.get('/search', asyncHandler(async (req, res) => {
     take: 12,
   });
 
- let shaped = products.map((product: any) => {
-  const { supplierLinks: _supplierLinks, ...productWithoutSupplierData } = product;
-  return {
-    ...publicProduct(productWithoutSupplierData),
-    purchaseCount: product.purchaseCount ?? 0,
-    viewCount: product.viewCount ?? 0,
-    availability: publicAvailability(product),
-    fitment: evaluateFitment(product, query.vehicleVariantId),
-    searchScore: scoreProductSearch(product, query.q),
-  };
-});
+  let shaped = products.map((product: any) => {
+    const { supplierLinks: _supplierLinks, ...productWithoutSupplierData } = product;
+    return {
+      ...publicProduct(productWithoutSupplierData),
+      purchaseCount: product.purchaseCount ?? 0,
+      viewCount: product.viewCount ?? 0,
+      availability: publicAvailability(product),
+      fitment: evaluateFitment(product, query.vehicleVariantId),
+      searchScore: scoreProductSearch(product, query.q),
+    };
+  });
   if (query.inStock) shaped = shaped.filter(product => product.availability.inStock);
   shaped.sort((a, b) => b.searchScore - a.searchScore || b.purchaseCount - a.purchaseCount || b.viewCount - a.viewCount);
   res.json({ products: shaped.slice(0, query.limit), vehicles });

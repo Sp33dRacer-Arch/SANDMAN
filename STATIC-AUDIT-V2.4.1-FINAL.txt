@@ -1,0 +1,92 @@
+SANDMAN V2.4.1 — FINAL STATIC / SECURITY / PACKAGE AUDIT
+Date: 2026-09-01
+
+AUDITED SOURCE
+- Base: SANDMAN V2.3 FIXED ready-for-local-verify project.
+- Target: SANDMAN V2.4.1 scan-fixed security / identity / social / mobile release.
+- Patch delta from V2.3: 40 files (16 new, 24 modified, 0 deleted).
+- The V2.3 search-ranking TypeScript fix is retained: purchaseCount/viewCount are included before ranked sorting.
+
+DEFECTS / HARDENING FINDINGS FIXED BEFORE PACKAGING
+1. Storefront runtime wiring: /vehicles, Build Advisor and Requests could call missing renderVehicleFinder(), renderAdvisor() and renderRequests() functions even though node --check passed.
+   FIXED: implementations restored and a route-to-render static audit now catches unresolved render targets.
+2. Password changes did not require a second factor on accounts with 2FA enabled.
+   FIXED: change-password now uses the same sensitive re-authentication + 2FA/recovery-code gate as other high-risk account changes.
+3. TOTP encryption depended directly on JWT_SECRET.
+   FIXED: TOTP_ENCRYPTION_KEY is supported and recommended so JWT signing-key rotation can be separated from authenticator-secret encryption.
+4. One-time recovery codes had a theoretical concurrent-use race.
+   FIXED: recovery-code consumption uses an atomic compare-and-swap update.
+5. User image URL checks rejected localhost but did not comprehensively reject private-network literal addresses.
+   FIXED: loopback, link-local and RFC1918 IPv4 plus loopback/link-local/private IPv6 literals are rejected.
+6. Registration could imply a verification email was sent when delivery failed.
+   FIXED: registration reports verificationEmailSent based on the actual provider result.
+7. Prisma schema/migration mismatch: PasswordResetToken had unused codeHash/attempts fields in the schema that were not added by the V2.4 migration.
+   FIXED: those stray schema fields were removed; migration-vs-schema delta coverage now reports 104 new database scalar fields covered, 0 missing, 0 extra.
+8. Automated registration abuse had no endpoint-specific limit beyond the global API limiter.
+   FIXED: /api/auth/register now has a dedicated 5-per-15-minute limiter per rate-limit key.
+9. Authenticated-but-unverified accounts could obtain Cloudinary upload signatures.
+   FIXED: upload signatures require verified email, reducing storage abuse by disposable accounts.
+10. Runtime/UI release markers were stale.
+   FIXED: package/API/storefront/admin markers now identify V2.4.1.
+
+CHECKS COMPLETED IN THE ARTIFACT BUILD ENVIRONMENT
+PASS  public/store/app.js -> node --check
+PASS  public/admin/app.js -> node --check
+PASS  scripts/static-v24-audit.mjs -> node --check
+PASS  V2.4.1 static UI/security audit
+      - 35 storefront render-call targets resolve to declared functions/handlers
+      - QR-code authenticator setup present
+      - raw otpauth URI not rendered in the storefront
+      - TOTP remains pending until the first correct code is verified
+      - password change uses sensitive-auth/2FA gate
+      - registration has a dedicated rate limit
+      - image upload signatures require verified email
+      - separate TOTP encryption key is configurable
+      - PasswordResetToken schema matches the shipped migration
+      - mobile viewport safe-area support present
+      - 16px phone inputs present to avoid iOS focus zoom
+      - ~44px touch targets present in storefront and admin
+      - light-theme overrides present
+      - runtime version markers are current
+      - no obvious eval()/new Function() browser execution primitive
+PASS  TypeScript AST parser -> 80 src/tests/prisma .ts/.tsx files, 0 syntax diagnostics
+PASS  Relative import resolution -> 300 relative import specifiers, 0 unresolved
+PASS  Prisma structural scan -> 53 models, 22 enums, 0 duplicate model fields or duplicate enum members
+PASS  Prisma migration-vs-schema delta coverage -> 104 new DB scalar fields covered, 0 missing, 0 extra
+PASS  Storefront CSS brace structure -> 1259 opening / 1259 closing braces
+PASS  Admin CSS brace structure -> 414 opening / 414 closing braces
+PASS  Obvious embedded credential-pattern scan -> no live Stripe/AWS/GitHub/Slack/Google/private-key patterns found
+PASS  V2.4 security/social migration present
+PASS  V2.4.1 installer, verifier, Railway env guide, changelog and manifest present
+PASS  Patch contains no deletion relative to the V2.3 baseline
+
+DEPENDENCY-AWARE VERIFICATION STILL REQUIRED ON THE USER'S WINDOWS PROJECT
+The artifact environment cannot reliably reach registry.npmjs.org and the supplied V2.3 project intentionally does not contain node_modules. An attempted npm install timed out. Therefore this audit does NOT falsely claim that Prisma generation/semantic validation, full TypeScript typechecking, Vitest, or the production build passed here.
+
+After overlaying the patch into the existing SANDMAN-backend and running npm install, run:
+  powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.4.1.ps1"
+
+That verifier executes:
+  npm run verify:ui
+  npx prisma generate
+  npx prisma validate
+  npm run typecheck
+  npm test
+  npm run build
+  git --no-pager diff --check
+  git status --short
+
+DO NOT PUSH TO GITHUB OR DEPLOY TO RAILWAY IF ANY OF THOSE STEPS FAIL.
+
+PRODUCTION SECURITY / OPERATIONS NOTES
+- Configure a separate random TOTP_ENCRYPTION_KEY (32+ chars) before users enable 2FA in production.
+- Rotate any authenticator secret exposed by the old raw V2.3 2FA screen by disabling/re-enabling 2FA after the upgrade.
+- Real verification email requires Resend or EMAIL_DELIVERY_WEBHOOK_URL.
+- SMS OTP verifies the phone number, not ownership of the email inbox; configure Twilio or SMS_DELIVERY_WEBHOOK_URL only if phone verification is wanted.
+- Production user-generated image publication fails closed unless CONTENT_MODERATION_WEBHOOK_URL returns an explicit safe/allow decision.
+- Keep .env and every provider secret out of Git.
+- Use npm run prisma:deploy / prisma migrate deploy on Railway production; never prisma migrate dev against production.
+- The built-in express-rate-limit memory store is appropriate for a single app process; if SANDMAN later scales to multiple app instances, move security rate limits to a shared store such as Redis.
+
+AUDIT CONCLUSION
+V2.4.1 is materially safer and more complete than the original V2.4 artifact and the static/deep scan is clean. It is intentionally labelled READY FOR LOCAL VERIFY rather than "perfect" or production-certified until the dependency-aware Windows verification script completes successfully against the user's actual installed dependencies and database configuration.

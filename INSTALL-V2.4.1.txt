@@ -1,0 +1,91 @@
+SANDMAN V2.4.1 — SECURITY / IDENTITY / SOCIAL / MOBILE
+UPGRADE INSTALLATION (Windows PowerShell)
+
+TARGET
+  Existing project: C:\Users\asand\Downloads\SANDMAN-backend
+  Required starting point: SANDMAN V2.3
+
+IMPORTANT
+1. Do not replace or delete your existing .git, .env or node_modules folders.
+2. If V2.3 is currently staged but not committed, commit it before installing V2.4.1 so you have a clean rollback point.
+3. Never commit .env.
+4. V2.4.1 contains the V2.4 database migration. Production must use `prisma migrate deploy`, not `prisma migrate dev`.
+5. The TOTP secret previously shown in the old 2FA screen should be treated as exposed. After V2.4.1 is installed, disable/re-enable 2FA for any account that actually activated that old secret.
+
+A. BACK UP / COMMIT V2.3
+  cd "$env:USERPROFILE\Downloads\SANDMAN-backend"
+  git status
+  git add .
+  git commit -m "SANDMAN v2.3 verified baseline"
+
+B. EXTRACT THE V2.4.1 PATCH
+Extract SANDMAN-V2.4.1-SCAN-FIXED-UPGRADE-PATCH.zip in Downloads.
+
+C. OVERLAY V2.4.1
+If the extracted folder is named:
+  SANDMAN-V2.4.1-SCAN-FIXED-UPGRADE-PATCH
+run:
+
+  robocopy "$env:USERPROFILE\Downloads\SANDMAN-V2.4.1-SCAN-FIXED-UPGRADE-PATCH" "$env:USERPROFILE\Downloads\SANDMAN-backend" /E /XD .git node_modules /XF .env /R:1 /W:1
+
+Robocopy exit codes 0–7 are normally success states. An exit code >= 8 means a copy failure.
+
+D. INSTALL V2.4.1 DEPENDENCIES
+  cd "$env:USERPROFILE\Downloads\SANDMAN-backend"
+  npm install
+
+V2.4.1 uses the QR-code package for the authenticator setup screen.
+
+E. COPY NEW ENV NAMES — DO NOT OVERWRITE YOUR .env
+Open `.env.example` and add only the V2.4.1 variables you need to your existing `.env` / Railway Variables.
+See RAILWAY-V2.4.1-ENV.txt.
+
+F. VERIFY LOCALLY BEFORE PUSHING
+  powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.4.1.ps1"
+
+The verifier prints every step so it does not look frozen. It checks:
+  storefront JS
+  admin JS
+  Prisma generation
+  Prisma schema validation
+  TypeScript
+  tests
+  production build
+  git diff whitespace
+  git status
+
+Do not push if any step says FAILED.
+
+G. DATABASE MIGRATION
+V2.4.1 ships:
+  prisma/migrations/20260901143000_v24_security_identity_social/migration.sql
+
+For Railway/production use:
+  npm run prisma:deploy
+
+Recommended Railway setup:
+  Build command:      npm run prisma:generate && npm run build
+  Pre-deploy command: npm run prisma:deploy
+  Start command:      node dist/src/server.js
+
+Do not run `prisma migrate dev` against the Railway production database.
+
+H. COMMIT AND PUSH ONLY AFTER VERIFY PASSES
+  git status
+  git add .
+  git commit -m "Upgrade SANDMAN to v2.4.1 scan-fixed security identity social mobile"
+  git push
+
+I. PRODUCTION SAFETY CHECKS AFTER DEPLOY
+1. Open /api/health.
+2. Register a TEST account using a real inbox you control.
+3. Verify that a SANDMAN 6-digit email code/link arrives.
+4. Add a test phone and verify SMS only if Twilio/SMS webhook is configured.
+5. Enable 2FA using the new QR flow; save recovery codes; sign out and test login.
+6. Verify active-session revoke and new-device notices.
+7. Apply for dealer verification with a test account and confirm Trust & Safety admin review.
+8. Follow another test account and publish a post/listing; verify the notification bell updates.
+9. Test dark + light mode on desktop AND a phone-size browser width.
+10. Confirm the mobile account tabs, 2FA QR, verification forms, notification list and Trust & Safety admin screens fit without horizontal page overflow.
+11. Before allowing production user-generated images, configure CONTENT_MODERATION_WEBHOOK_URL. Production intentionally blocks those image publications if the scanner is not ready.
+12. Rotate any authenticator secret that was exposed by the old V2.3 2FA screen.

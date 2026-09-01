@@ -19,6 +19,12 @@ const optionalMin24String = z.preprocess(value => {
   return trimmed ? trimmed : undefined;
 }, z.string().min(24).optional());
 
+const optionalMin32String = z.preprocess(value => {
+  if (typeof value !== 'string') return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}, z.string().min(32).optional());
+
 const booleanFromEnv = z.preprocess(value => {
   if (typeof value === 'boolean') return value;
   if (typeof value !== 'string') return value;
@@ -35,6 +41,8 @@ const schema = z.object({
   API_URL: z.string().url().default('http://localhost:4000'),
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32),
+  // Keep TOTP encryption independent from JWT rotation in production.
+  TOTP_ENCRYPTION_KEY: optionalMin32String,
   JWT_EXPIRES_IN: z.string().default('2h'),
   SESSION_DAYS: z.coerce.number().int().min(1).max(365).default(90),
   CURRENCY: z.string().length(3).default('USD'),
@@ -56,6 +64,16 @@ const schema = z.object({
 
   EMAIL_DELIVERY_WEBHOOK_URL: optionalUrlString,
   EMAIL_DELIVERY_WEBHOOK_SECRET: z.string().optional(),
+  RESEND_API_KEY: optionalNonEmptyString,
+  EMAIL_FROM: z.string().email().default('security@sandman.local'),
+  SMS_DELIVERY_WEBHOOK_URL: optionalUrlString,
+  SMS_DELIVERY_WEBHOOK_SECRET: z.string().optional(),
+  TWILIO_ACCOUNT_SID: optionalNonEmptyString,
+  TWILIO_AUTH_TOKEN: optionalNonEmptyString,
+  TWILIO_FROM_NUMBER: optionalNonEmptyString,
+  CONTENT_MODERATION_WEBHOOK_URL: optionalUrlString,
+  CONTENT_MODERATION_WEBHOOK_SECRET: z.string().optional(),
+  REQUIRE_IMAGE_MODERATION: booleanFromEnv.default(false),
 
   MARKETPLACE_COMMISSION_PERCENT: z.coerce.number().min(0).max(50).default(10),
   MARKETPLACE_PAYOUT_DELAY_DAYS: z.coerce.number().int().min(0).max(30).default(7),

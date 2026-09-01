@@ -1,0 +1,62 @@
+SANDMAN V2.4.1 — RAILWAY VARIABLES
+
+Keep all secrets in Railway Variables. Do NOT place real values in Git.
+
+CORE (already required)
+  NODE_ENV=production
+  APP_URL=https://YOUR-DOMAIN
+  API_URL=https://YOUR-DOMAIN
+  DATABASE_URL=...
+  JWT_SECRET=...  (at least 32 chars)
+  TOTP_ENCRYPTION_KEY=...  (recommended: a separate random 32+ char secret; set it before enabling 2FA)
+
+EMAIL VERIFICATION — choose ONE delivery path
+Option A: Resend
+  RESEND_API_KEY=re_...
+  EMAIL_FROM=SANDMAN <security@your-verified-domain.com>
+
+Option B: your provider bridge
+  EMAIL_DELIVERY_WEBHOOK_URL=https://...
+  EMAIL_DELIVERY_WEBHOOK_SECRET=...
+  EMAIL_FROM=security@your-domain.com
+
+PHONE/SMS VERIFICATION — optional, choose ONE path
+Option A: Twilio
+  TWILIO_ACCOUNT_SID=AC...
+  TWILIO_AUTH_TOKEN=...
+  TWILIO_FROM_NUMBER=+1...
+
+Option B: your SMS bridge
+  SMS_DELIVERY_WEBHOOK_URL=https://...
+  SMS_DELIVERY_WEBHOOK_SECRET=...
+
+USER IMAGE SAFETY — REQUIRED before production user-generated images can publish
+  CONTENT_MODERATION_WEBHOOK_URL=https://YOUR-SCANNER-ENDPOINT
+  CONTENT_MODERATION_WEBHOOK_SECRET=...
+
+The scanner must return JSON with an explicit safe decision, for example:
+  {"allowed":true}
+or
+  {"decision":"SAFE"}
+
+Unsafe response examples:
+  {"allowed":false,"reasons":["sexual_content"]}
+  {"decision":"BLOCK"}
+
+Production V2.4.1 fails closed when the scanner is missing, unavailable or ambiguous. This is intentional so an unscanned user image is not published.
+
+For development you can also force fail-closed behavior with:
+  REQUIRE_IMAGE_MODERATION=true
+
+EXISTING CLOUDINARY IMAGE UPLOADS
+  CLOUDINARY_CLOUD_NAME=...
+  CLOUDINARY_API_KEY=...
+  CLOUDINARY_API_SECRET=...
+
+RAILWAY COMMANDS
+  Build:      npm run prisma:generate && npm run build
+  Pre-deploy: npm run prisma:deploy
+  Start:      node dist/src/server.js
+
+NOTE ABOUT JWT_SECRET + 2FA
+Existing encrypted authenticator secrets derive their encryption key from JWT_SECRET. Do not rotate JWT_SECRET without a deliberate 2FA-secret rotation/migration plan, or existing TOTP secrets will no longer decrypt.

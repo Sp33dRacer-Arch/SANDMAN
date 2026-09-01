@@ -2,7 +2,7 @@
 <html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#f5f1e8" />
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg" />
   <meta name="description" content="SANDMAN — vehicle-first automotive parts, verified fitment, supplier stock, marketplace sellers and builds." />
@@ -37,6 +37,7 @@
         </div>
       </details>
       <a href="/marketplace">Marketplace</a>
+      <a href="/feed">Following</a>
     </nav>
     <div class="header-actions">
       <button class="icon-btn" id="searchToggle" aria-label="Search" title="Search">
@@ -71,6 +72,7 @@
       <div class="mobile-menu-group"><span class="mobile-menu-label">SHOP</span><a href="/shop">Shop all</a><a href="/marketplace">Marketplace</a><a href="/wishlist">Wishlist</a></div>
       <div class="mobile-menu-group"><span class="mobile-menu-label">VEHICLE</span><a href="/vehicles">Vehicle finder</a><a href="/garage">My Garage</a><a href="/requests">Request a part</a></div>
       <div class="mobile-menu-group"><span class="mobile-menu-label">BUILD</span><a href="/build-advisor">Build advisor</a><a href="/builds">My builds</a></div>
+      <div class="mobile-menu-group"><span class="mobile-menu-label">SOCIAL</span><a href="/feed">Following feed</a><a href="/notifications">Notifications</a></div>
       <div class="mobile-menu-group"><span class="mobile-menu-label">ACCOUNT</span><a href="/account">My profile</a><a href="/account?tab=purchases">Purchases</a><a href="/account?tab=sales">Sales</a><a href="/messages">Messages</a><a href="/sell">Sell a part</a><a href="/seller">Seller studio</a><a href="/admin">Admin</a></div>
       <button class="mobile-theme-toggle" data-theme-toggle type="button"><span class="theme-icon" aria-hidden="true">☾</span><span class="theme-label">Dark mode</span></button>
     </nav>
@@ -113,7 +115,8 @@
       <form id="registerForm" class="auth-form hidden">
         <div class="field-row"><label>First name<input name="firstName" required /></label><label>Last name<input name="lastName" required /></label></div>
         <label>Email<input name="email" type="email" required /></label>
-        <label>Password<input name="password" type="password" minlength="8" required /></label>
+        <label>Password<input name="password" type="password" minlength="10" required /></label>
+        <p class="form-note">Use 10+ characters with uppercase, lowercase and a number. We will email you a 6-digit verification code.</p>
         <button class="primary-btn wide" type="submit">Create SANDMAN account</button>
       </form>
     </div>

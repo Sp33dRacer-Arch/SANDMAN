@@ -8,8 +8,25 @@ import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 import { createNotification } from '../../services/notification.service';
 import { publicProduct } from '../../lib/public-product';
+import { moderateTextLocal } from '../../services/content-moderation.service';
 
 export const communityRouter = Router();
+
+async function assertCanInteract(actorId: string, targetId: string) {
+  const blocked = await prisma.userBlock.findFirst({ where: { OR: [{ blockerId: actorId, blockedId: targetId }, { blockerId: targetId, blockedId: actorId }] }, select: { id: true } });
+  if (blocked) throw new HttpError(403, 'Interaction is unavailable');
+}
+
+async function assertCanMessage(actorId: string, targetId: string) {
+  await assertCanInteract(actorId, targetId);
+  const target = await prisma.user.findUnique({ where: { id: targetId }, select: { messagePrivacy: true } });
+  if (!target) throw new HttpError(404, 'User not found');
+  if (target.messagePrivacy === 'NOBODY') throw new HttpError(403, 'This user is not accepting messages');
+  if (target.messagePrivacy === 'FOLLOWERS') {
+    const follows = await prisma.userFollow.findUnique({ where: { followerId_followingId: { followerId: actorId, followingId: targetId } } });
+    if (!follows) throw new HttpError(403, 'Only followers can message this user');
+  }
+}
 
 communityRouter.get('/seller/stats', requireAuth, asyncHandler(async (req, res) => {
   const [listings, sales, offers, conversations, openCases, paidPayouts, payoutGroups] = await Promise.all([
@@ -58,7 +75,7 @@ communityRouter.get('/seller/:sellerId', asyncHandler(async (req, res) => {
     prisma.user.findUnique({
       where: { id: sellerId },
       select: {
-        id: true, firstName: true, lastName: true, createdAt: true, sellerCountry: true,
+        id: true, username: true, displayName: true, avatarUrl: true, firstName: true, lastName: true, createdAt: true, sellerCountry: true,
         sellerProfile: true,
       },
     }),
@@ -108,10 +125,16 @@ communityRouter.patch('/seller/profile', asyncHandler(async (req, res) => {
     location: z.string().trim().max(160).nullable().optional(),
     responseTimeHours: z.number().int().min(0).max(720).nullable().optional(),
   }).parse(req.body);
+  const safeBody = {
+    ...body,
+    storeName: body.storeName ? moderateTextLocal(body.storeName, 'Store name') : body.storeName,
+    bio: body.bio ? moderateTextLocal(body.bio, 'Seller bio') : body.bio,
+    location: body.location ? moderateTextLocal(body.location, 'Seller location') : body.location,
+  };
   const profile = await prisma.sellerProfile.upsert({
     where: { userId: req.auth!.userId },
-    update: body,
-    create: { userId: req.auth!.userId, ...body },
+    update: safeBody,
+    create: { userId: req.auth!.userId, ...safeBody },
   });
   res.json(profile);
 }));
@@ -121,6 +144,7 @@ communityRouter.post('/offers', asyncHandler(async (req, res) => {
   const product = await prisma.product.findFirst({ where: { id: body.productId, sourceType: 'MARKETPLACE', status: 'ACTIVE' } });
   if (!product?.sellerId) throw new HttpError(404, 'Marketplace listing not found');
   if (product.sellerId === req.auth!.userId) throw new HttpError(400, 'You cannot make an offer on your own listing');
+  await assertCanInteract(req.auth!.userId, product.sellerId);
   if ((product.stockQuantity ?? 0) < 1) throw new HttpError(409, 'This listing is sold out');
   if (body.amountCents > product.priceCents * 2) throw new HttpError(400, 'Offer amount is not valid');
   const existingOpen = await prisma.offer.findFirst({ where: { productId: product.id, buyerId: req.auth!.userId, status: 'OPEN' } });
@@ -132,7 +156,7 @@ communityRouter.post('/offers', asyncHandler(async (req, res) => {
       sellerId: product.sellerId,
       createdById: req.auth!.userId,
       amountCents: body.amountCents,
-      message: body.message,
+      message: body.message ? moderateTextLocal(body.message, 'Offer message') : undefined,
       expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
     },
     include: { product: { select: { name: true, slug: true } } },
@@ -221,12 +245,13 @@ communityRouter.post('/conversations', asyncHandler(async (req, res) => {
   const product = await prisma.product.findFirst({ where: { id: body.productId, sourceType: 'MARKETPLACE', status: 'ACTIVE' } });
   if (!product?.sellerId) throw new HttpError(404, 'Marketplace listing not found');
   if (product.sellerId === req.auth!.userId) throw new HttpError(400, 'You cannot message yourself');
+  await assertCanMessage(req.auth!.userId, product.sellerId);
   const conversation = await prisma.conversation.upsert({
     where: { productId_buyerId_sellerId: { productId: product.id, buyerId: req.auth!.userId, sellerId: product.sellerId } },
     update: { updatedAt: new Date() },
     create: { productId: product.id, buyerId: req.auth!.userId, sellerId: product.sellerId },
   });
-  const message = await prisma.message.create({ data: { conversationId: conversation.id, senderId: req.auth!.userId, body: body.message } });
+  const message = await prisma.message.create({ data: { conversationId: conversation.id, senderId: req.auth!.userId, body: moderateTextLocal(body.message, 'Message') } });
   await createNotification({ userId: product.sellerId, type: 'MESSAGE', title: 'New message', body: `Someone asked about ${product.name}.`, link: '#/messages' });
   res.status(201).json({ conversation, message });
 }));
@@ -259,12 +284,13 @@ communityRouter.post('/conversations/:id/messages', asyncHandler(async (req, res
   const { message } = z.object({ message: z.string().trim().min(1).max(2000) }).parse(req.body);
   const conversation = await prisma.conversation.findFirst({ where: { id, OR: [{ buyerId: req.auth!.userId }, { sellerId: req.auth!.userId }] }, include: { product: { select: { name: true } } } });
   if (!conversation) throw new HttpError(404, 'Conversation not found');
+  const recipient = req.auth!.userId === conversation.buyerId ? conversation.sellerId : conversation.buyerId;
+  await assertCanMessage(req.auth!.userId, recipient);
   const row = await prisma.$transaction(async tx => {
-    const created = await tx.message.create({ data: { conversationId: id, senderId: req.auth!.userId, body: message } });
+    const created = await tx.message.create({ data: { conversationId: id, senderId: req.auth!.userId, body: moderateTextLocal(message, 'Message') } });
     await tx.conversation.update({ where: { id }, data: { updatedAt: new Date() } });
     return created;
   });
-  const recipient = req.auth!.userId === conversation.buyerId ? conversation.sellerId : conversation.buyerId;
   await createNotification({ userId: recipient, type: 'MESSAGE', title: 'New message', body: `New message about ${conversation.product.name}.`, link: '#/messages' });
   res.status(201).json(row);
 }));
