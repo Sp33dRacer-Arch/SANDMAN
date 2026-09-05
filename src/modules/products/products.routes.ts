@@ -26,6 +26,7 @@ const listSchema = z.object({
   source: z.enum(['DROPSHIP', 'MARKETPLACE']).optional(),
   condition: z.enum(['NEW', 'USED', 'REMANUFACTURED', 'OPEN_BOX']).optional(),
   vehicleVariantId: z.string().optional(),
+  country: z.string().trim().length(2).transform(v => v.toUpperCase()).optional(),
   minPrice: z.coerce.number().nonnegative().optional(),
   maxPrice: z.coerce.number().nonnegative().optional(),
   inStock: queryBoolean.optional(),
@@ -61,7 +62,7 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
       ] } } } },
     ] });
   }
-  if (q.vehicleVariantId) and.push({ OR: [{ isUniversal: true }, { fitments: { some: { vehicleVariantId: q.vehicleVariantId } } }] });
+  if (q.vehicleVariantId) and.push({ OR: [{ isUniversal: true }, { fitments: { some: { vehicleVariantId: q.vehicleVariantId, compatibility: 'FITS' } } }] });
   if (q.inStock) and.push({ OR: [
     { sourceType: 'MARKETPLACE', stockQuantity: { gt: 0 } },
     { sourceType: 'DROPSHIP', supplierLinks: { some: { active: true, OR: [{ availableStock: null }, { availableStock: { gt: 0 } }] } } },
@@ -87,10 +88,15 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
     images: { orderBy: { position: 'asc' as const }, take: 1 },
     supplierLinks: { where: { active: true }, select: { availableStock: true } },
     seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
+    regionalPrices: {
+      where: { regionKey: q.country ?? '__NO_SELECTED_COUNTRY__' },
+      select: { regionKey: true, currency: true, priceCents: true, compareAtCents: true },
+      take: 1,
+    },
     // Listing cards need only the selected vehicle's evidence, never every fitment row.
     fitments: {
       where: { vehicleVariantId: q.vehicleVariantId ?? '__NO_SELECTED_VEHICLE__' },
-      select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true },
+      select: { vehicleVariantId: true, verified: true, compatibility: true, source: true, notes: true, verifiedAt: true },
     },
   };
 
@@ -144,8 +150,9 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
   const ratingMap = new Map(ratingRows.map(row => [row.productId, { rating: row._avg.rating ?? null, count: row._count.rating }]));
 
   const mapped = items.map(item => {
-    const { supplierLinks, fitments, ...itemWithoutSupplierData } = item;
+    const { supplierLinks, fitments, regionalPrices, ...itemWithoutSupplierData } = item;
     const publicItem = publicProduct(itemWithoutSupplierData);
+    const regionalPrice = regionalPrices[0] ?? null;
     const fitment = q.vehicleVariantId ? evaluateFitment({ ...item, fitments }, q.vehicleVariantId) : null;
     const review = ratingMap.get(item.id);
     return {
@@ -155,6 +162,12 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
       inStock: item.sourceType === 'MARKETPLACE' ? (item.stockQuantity ?? 0) > 0 : supplierLinks.some(link => link.availableStock === null || link.availableStock > 0),
       fitmentStatus: fitment?.status ?? null,
       fitmentVerified: fitment?.verified ?? false,
+      regionalPrice: regionalPrice ? {
+        priceCents: regionalPrice.priceCents,
+        compareAtCents: regionalPrice.compareAtCents,
+        currency: regionalPrice.currency,
+        regionKey: regionalPrice.regionKey,
+      } : null,
     };
   });
   if (shouldRankSearch && q.q) {
@@ -175,6 +188,7 @@ productsRouter.get('/categories', asyncHandler(async (_req, res) => {
 
 productsRouter.get('/:slug', asyncHandler(async (req, res) => {
   const vehicleVariantId = typeof req.query.vehicleVariantId === 'string' ? req.query.vehicleVariantId : undefined;
+  const country = typeof req.query.country === 'string' && /^[A-Za-z]{2}$/.test(req.query.country) ? req.query.country.toUpperCase() : undefined;
   const product = await prisma.product.findFirst({
     where: { slug: routeParam(req.params.slug, 'slug'), status: 'ACTIVE' },
     include: {
@@ -188,6 +202,11 @@ productsRouter.get('/:slug', asyncHandler(async (req, res) => {
         select: { availableStock: true },
       },
       seller: { select: { id: true, firstName: true, lastName: true, createdAt: true, sellerProfile: true } },
+      regionalPrices: {
+        where: { regionKey: country ?? '__NO_SELECTED_COUNTRY__' },
+        select: { regionKey: true, currency: true, priceCents: true, compareAtCents: true },
+        take: 1,
+      },
       reviews: {
         where: { status: 'PUBLISHED' },
         include: { user: { select: { id: true, firstName: true, lastName: true } }, orderItem: { select: { fitmentSnapshot: true } } },
@@ -230,8 +249,9 @@ productsRouter.get('/:slug', asyncHandler(async (req, res) => {
     ? (product.stockQuantity ?? 0) > 0
     : product.supplierLinks.some(link => link.availableStock === null || link.availableStock > 0);
 
-  const { supplierLinks: _supplierLinks, reviews: _reviews, ...productWithoutSupplierData } = product;
+  const { supplierLinks: _supplierLinks, reviews: _reviews, regionalPrices, ...productWithoutSupplierData } = product;
   const safeProduct = publicProduct(productWithoutSupplierData);
+  const regionalPrice = regionalPrices[0] ?? null;
   const safeSeller = safeProduct.seller ? {
     id: safeProduct.seller.id,
     firstName: safeProduct.seller.firstName,
@@ -242,6 +262,7 @@ productsRouter.get('/:slug', asyncHandler(async (req, res) => {
       bio: safeProduct.seller.sellerProfile.bio,
       location: safeProduct.seller.sellerProfile.location,
       verified: safeProduct.seller.sellerProfile.verified,
+      dealerVerifiedAt: safeProduct.seller.sellerProfile.dealerVerifiedAt,
       responseTimeHours: safeProduct.seller.sellerProfile.responseTimeHours,
       totalSales: safeProduct.seller.sellerProfile.totalSales,
       ratingAverage: safeProduct.seller.sellerProfile.ratingAverage,
@@ -249,13 +270,30 @@ productsRouter.get('/:slug', asyncHandler(async (req, res) => {
       createdAt: safeProduct.seller.sellerProfile.createdAt,
     } : null,
   } : null;
-  res.json({ ...safeProduct, seller: safeSeller, reviews: publicReviews, fitmentStatus, fitmentVerified: fitment.verified, fitmentReason: fitment.reason, fitsVehicle: fitment.fits, rating, reviewCount: reviewAggregate._count.rating, inStock });
+  res.json({
+    ...safeProduct,
+    seller: safeSeller,
+    reviews: publicReviews,
+    fitmentStatus,
+    fitmentVerified: fitment.verified,
+    fitmentReason: fitment.reason,
+    fitsVehicle: fitment.fits,
+    rating,
+    reviewCount: reviewAggregate._count.rating,
+    inStock,
+    regionalPrice: regionalPrice ? {
+      priceCents: regionalPrice.priceCents,
+      compareAtCents: regionalPrice.compareAtCents,
+      currency: regionalPrice.currency,
+      regionKey: regionalPrice.regionKey,
+    } : null,
+  });
 }));
 
 productsRouter.get('/:id/fitment/:vehicleVariantId', asyncHandler(async (req, res) => {
   const product = await prisma.product.findUnique({
     where: { id: routeParam(req.params.id, 'id') },
-    select: { id: true, name: true, requiresFitment: true, isUniversal: true, fitments: { select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true } } },
+    select: { id: true, name: true, requiresFitment: true, isUniversal: true, fitments: { select: { vehicleVariantId: true, verified: true, compatibility: true, source: true, notes: true, verifiedAt: true } } },
   });
   if (!product) throw new HttpError(404, 'Product not found');
   const result = evaluateFitment(product, routeParam(req.params.vehicleVariantId, 'vehicleVariantId'));

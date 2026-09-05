@@ -7,6 +7,7 @@ import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 import { effectiveOfferUnitPrice } from '../../lib/offer-pricing';
 import { publicProduct } from '../../lib/public-product';
+import { evaluateFitment } from '../../services/fitment.service';
 
 export const cartRouter = Router();
 cartRouter.use(requireAuth);
@@ -63,7 +64,7 @@ cartRouter.post('/items', asyncHandler(async (req, res) => {
 
   const product = await prisma.product.findFirst({
     where: { id: data.productId, status: 'ACTIVE' },
-    include: { fitments: { select: { vehicleVariantId: true } }, supplierLinks: { where: { active: true } } },
+    include: { fitments: { select: { vehicleVariantId: true, verified: true, compatibility: true, source: true, notes: true, verifiedAt: true } }, supplierLinks: { where: { active: true } } },
   });
   if (!product) throw new HttpError(404, 'Product not found');
   if (product.sourceType === 'MARKETPLACE' && product.sellerId === req.auth!.userId) throw new HttpError(409, 'You cannot buy your own marketplace listing');
@@ -88,8 +89,10 @@ cartRouter.post('/items', asyncHandler(async (req, res) => {
 
   if (product.requiresFitment && !product.isUniversal) {
     if (!data.vehicleVariantId) throw new HttpError(400, 'Vehicle selection is required for this part');
-    const compatible = product.fitments.some(f => f.vehicleVariantId === data.vehicleVariantId);
-    if (!compatible) throw new HttpError(409, 'This part does not fit the selected vehicle');
+    const fitment = evaluateFitment(product, data.vehicleVariantId);
+    if (fitment.status === 'DOES_NOT_FIT') throw new HttpError(409, 'This part is explicitly incompatible with the selected vehicle');
+    // UNKNOWN is intentionally allowed into the cart. Checkout requires an
+    // explicit acknowledgement before an unconfirmed fitment can be purchased.
   }
 
   const cart = await prisma.cart.upsert({ where: { userId: req.auth!.userId }, update: {}, create: { userId: req.auth!.userId } });

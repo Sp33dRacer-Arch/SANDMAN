@@ -1,0 +1,90 @@
+SANDMAN V2.5 — SCAN-FIXED STATIC / SOURCE AUDIT
+Date: 2026-09-05
+
+RESULT
+- Dependency-free source/static scan: PASS
+- Ready for local dependency-backed verification: YES
+- Certified for live Railway deployment without local verification: NO
+
+CHECKS COMPLETED
+TypeScript files parsed: 87
+Syntax errors: 0
+Relative-import files scanned: 96
+Missing relative imports: 0
+Typed env references: 56
+Env schema keys: 64
+Missing env definitions: 0
+- Storefront JavaScript syntax: PASS
+- Admin JavaScript syntax: PASS
+- All scripts/*.mjs syntax: PASS
+- V2.4.1 security baseline on V2.5.0: PASS
+- V2.5 feature/safety static audit: PASS
+- V2.5 migration destructive SQL scan: PASS
+- Package/API runtime version parity: PASS (2.5.0)
+
+V2.4 SECURITY BASELINE OUTPUT
+PASS: 36 storefront render routes resolve to declared functions
+PASS: 2FA QR setup is present
+PASS: raw otpauth URI is not rendered by the storefront
+PASS: 2FA remains pending until the first code is verified
+PASS: password change uses sensitive-auth/2FA gate
+PASS: registration endpoint has a dedicated rate limit
+PASS: image upload signatures require a verified email
+PASS: separate TOTP encryption key is configurable
+PASS: PasswordResetToken schema matches the shipped migration
+PASS: mobile viewport safe-area support present
+PASS: mobile inputs prevent iOS focus zoom
+PASS: 44px mobile touch targets present in store and admin
+PASS: light-theme overrides present
+PASS: runtime version markers are current
+PASS: no obvious dynamic-code execution primitive in browser bundles
+SANDMAN V2.4.1 security baseline audit passed on V2.5.0.
+
+V2.5 AUDIT OUTPUT
+PASS: explicit fitment compatibility enum
+PASS: fitment compatibility persisted
+PASS: negative-fit migration
+PASS: unknown-fitment acknowledgement
+PASS: unknown-fitment checkout gate
+PASS: restricted-country enforcement
+PASS: non-taxable product exclusion
+PASS: tax-inclusive handling
+PASS: fail-safe unknown shipping
+PASS: fail-safe tax configuration
+PASS: duty-provider integration
+PASS: regional payment enforcement
+PASS: Verified Fit storefront
+PASS: fitment evidence UI
+PASS: fit-only shop control
+PASS: known-incompatible purchase blocking
+PASS: cookie/privacy consent
+PASS: Customer 360 admin
+PASS: Customer 360 detail view
+PASS: Global Commerce admin
+PASS: Launch Readiness admin
+PASS: Customer Intelligence nav
+PASS: Global Commerce nav
+PASS: Launch Readiness nav
+PASS: automatic readiness override protection
+PASS: admin-only readiness updates
+PASS: Customer Intelligence access control
+PASS: masked VIN in Customer 360
+PASS: error monitoring configuration
+PASS: read replica configuration
+PASS: API version 2.5.0
+PASS: package version 2.5.0
+PASS: missing fitment remains unknown
+PASS: V2.5 migration has no obvious destructive SQL
+SANDMAN V2.5 static audit passed.
+
+NOT RUN IN THIS ENVIRONMENT
+- npm install could not complete because dependency download timed out.
+- Prisma client generation
+- prisma validate
+- full TypeScript dependency-backed typecheck
+- Vitest suite
+- production tsc build
+- browser E2E against a deployed environment
+- real payment/supplier/email/SMS/moderation/provider certification
+
+Run VERIFY-V2.5.ps1 on your machine before push/deploy.

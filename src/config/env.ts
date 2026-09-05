@@ -88,9 +88,35 @@ const schema = z.object({
   CHECKOUT_RESERVATION_MINUTES: z.coerce.number().int().min(5).max(240).default(30),
   BANK_TRANSFER_RESERVATION_HOURS: z.coerce.number().int().min(1).max(168).default(48),
 
+  // V2.5 global-commerce fallbacks are retained only for legacy/internal tools.
+  // Customer checkout itself fails closed unless a CommerceRegion + shipping/tax
+  // configuration exists for the destination.
   FREE_SHIPPING_THRESHOLD: z.coerce.number().nonnegative().default(250),
   FLAT_SHIPPING_RATE: z.coerce.number().nonnegative().default(18),
   DEFAULT_TAX_RATE: z.coerce.number().min(0).max(1).default(0),
+
+  DEFAULT_LOCALE: z.string().min(2).max(30).default('en-US'),
+  CARRIER_RATE_WEBHOOK_URL: optionalUrlString,
+  CARRIER_RATE_WEBHOOK_SECRET: optionalNonEmptyString,
+  DUTY_CALCULATION_WEBHOOK_URL: optionalUrlString,
+  DUTY_CALCULATION_WEBHOOK_SECRET: optionalNonEmptyString,
+
+  ERROR_MONITORING_WEBHOOK_URL: optionalUrlString,
+  ERROR_MONITORING_WEBHOOK_SECRET: optionalNonEmptyString,
+  UPTIME_MONITOR_URL: optionalUrlString,
+
+  DB_STORAGE_ALERT_THRESHOLD_MB: z.coerce.number().positive().optional(),
+  DB_STORAGE_ALERT_WEBHOOK_URL: optionalUrlString,
+  READ_REPLICA_DATABASE_URL: optionalNonEmptyString,
+
+  ANALYTICS_WAREHOUSE_URL: optionalUrlString,
+  ANALYTICS_WAREHOUSE_SECRET: optionalNonEmptyString,
+  ANALYTICS_RETENTION_DAYS: z.coerce.number().int().min(7).max(3650).default(365),
+  MARKETING_EVENT_WEBHOOK_URL: optionalUrlString,
+  MARKETING_EVENT_WEBHOOK_SECRET: optionalNonEmptyString,
+
+  FX_RATE_PROVIDER_URL: optionalUrlString,
+  FX_RATE_PROVIDER_API_KEY: optionalNonEmptyString,
 });
 
 const parsed = schema.safeParse(process.env);

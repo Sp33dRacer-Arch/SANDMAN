@@ -182,6 +182,20 @@ enum FitmentSource {
   IMPORTED
 }
 
+enum FitmentCompatibility {
+  FITS
+  DOES_NOT_FIT
+}
+
+enum ReadinessStatus {
+  NOT_STARTED
+  NEEDS_CONFIGURATION
+  NEEDS_TEST
+  PASS
+  FAIL
+  NOT_APPLICABLE
+}
+
 model User {
   id           String    @id @default(cuid())
   email        String    @unique
@@ -257,6 +271,13 @@ model User {
   securityEvents  SecurityEvent[]
   phoneVerificationTokens PhoneVerificationToken[]
   notificationPreference NotificationPreference?
+  customerNotes          CustomerNote[] @relation("CustomerNotesCustomer")
+  customerNotesAuthored  CustomerNote[] @relation("CustomerNotesAuthor")
+  customerTags           CustomerTagAssignment[] @relation("CustomerTagsCustomer")
+  customerTagsAssigned   CustomerTagAssignment[] @relation("CustomerTagsActor")
+  privacyConsents        PrivacyConsent[]
+  analyticsEvents        AnalyticsEvent[]
+  readinessChecks        OperationalReadiness[] @relation("ReadinessChecker")
 }
 
 model AuthSession {
@@ -449,6 +470,10 @@ model Product {
   shippingMaxDays Int?
   seoTitle       String?
   seoDescription String?
+  hsCode             String?
+  countryOfOrigin    String?
+  customsDescription String?
+  restrictedCountries Json?
   viewCount      Int             @default(0)
   purchaseCount  Int             @default(0)
   wishlistCount  Int             @default(0)
@@ -466,6 +491,7 @@ model Product {
   offers         Offer[]
   conversations  Conversation[]
   recentlyViewed RecentlyViewed[]
+  regionalPrices RegionalPrice[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
 
@@ -494,6 +520,7 @@ model ProductFitment {
   vehicleVariantId String
   notes            String?
   verified         Boolean        @default(false)
+  compatibility    FitmentCompatibility @default(FITS)
   source           FitmentSource  @default(MANUAL)
   verifiedAt       DateTime?
   product          Product        @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -502,6 +529,7 @@ model ProductFitment {
   @@unique([productId, vehicleVariantId])
   @@index([vehicleVariantId])
   @@index([verified, source])
+  @@index([compatibility, vehicleVariantId])
 }
 
 model Supplier {
@@ -595,6 +623,14 @@ model Order {
   paymentProvider        String?
   customerNote           String?
   internalNote           String?
+  taxJurisdiction        String?
+  taxRateBps             Int?
+  taxInclusive           Boolean?
+  dutyCents              Int               @default(0)
+  displayCurrency        String?
+  fxRate                 Float?
+  importScheme           String?
+  shippingQuoteMeta      Json?
   marketplaceStockReleasedAt DateTime?
   refundInProgressAt     DateTime?
   refundInProgressCaseId String?
@@ -1217,4 +1253,150 @@ model AuditLog {
 
   @@index([createdAt])
   @@index([actorUserId, createdAt])
+}
+
+model CustomerNote {
+  id           String   @id @default(cuid())
+  customerId   String
+  authorUserId String
+  body         String
+  createdAt    DateTime @default(now())
+  customer     User     @relation("CustomerNotesCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  author       User     @relation("CustomerNotesAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([customerId, createdAt])
+  @@index([authorUserId, createdAt])
+}
+
+model CustomerTagAssignment {
+  id               String   @id @default(cuid())
+  customerId       String
+  tag              String
+  assignedByUserId String
+  createdAt        DateTime @default(now())
+  customer         User     @relation("CustomerTagsCustomer", fields: [customerId], references: [id], onDelete: Cascade)
+  assignedBy       User     @relation("CustomerTagsActor", fields: [assignedByUserId], references: [id], onDelete: Restrict)
+
+  @@unique([customerId, tag])
+  @@index([tag, createdAt])
+}
+
+model PrivacyConsent {
+  id            String   @id @default(cuid())
+  anonymousId   String   @unique
+  userId        String?
+  necessary     Boolean  @default(true)
+  analytics     Boolean  @default(false)
+  marketing     Boolean  @default(false)
+  preferences   Boolean  @default(false)
+  policyVersion String   @default("2026-09-v2.5")
+  consentedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+model AnalyticsEvent {
+  id          String   @id @default(cuid())
+  userId      String?
+  anonymousId String
+  name        String
+  path        String
+  metadata    Json?
+  createdAt   DateTime @default(now())
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([name, createdAt])
+  @@index([anonymousId, createdAt])
+}
+
+model FxRate {
+  id            String   @id @default(cuid())
+  baseCurrency  String
+  quoteCurrency String
+  rate          Float
+  source        String   @default("MANUAL")
+  fetchedAt     DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([baseCurrency, quoteCurrency])
+}
+
+model TaxRule {
+  id                String   @id @default(cuid())
+  country           String
+  region            String?
+  label             String
+  taxType           String   @default("VAT")
+  rateBps           Int
+  taxInclusive      Boolean  @default(false)
+  appliesToShipping Boolean  @default(false)
+  priority          Int      @default(100)
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([country, region, active, priority])
+}
+
+model ShippingZone {
+  id                         String   @id @default(cuid())
+  name                       String
+  countries                  Json
+  currency                   String   @default("USD")
+  rateCents                  Int
+  freeShippingThresholdCents Int?
+  minDays                    Int?
+  maxDays                    Int?
+  carrierCode                String?
+  serviceCode                String?
+  priority                   Int      @default(100)
+  active                     Boolean  @default(true)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+
+  @@index([active, priority])
+}
+
+model CommerceRegion {
+  id              String   @id @default(cuid())
+  country         String   @unique
+  locale          String   @default("en-US")
+  currency        String   @default("USD")
+  shippingAllowed Boolean  @default(false)
+  taxRequired     Boolean  @default(true)
+  dutiesRequired  Boolean  @default(false)
+  paymentMethods  Json
+  importScheme    String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model RegionalPrice {
+  id             String   @id @default(cuid())
+  productId      String
+  regionKey      String
+  currency       String
+  priceCents     Int
+  compareAtCents Int?
+  product        Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([productId, regionKey, currency])
+  @@index([regionKey, currency])
+}
+
+model OperationalReadiness {
+  key             String          @id
+  status          ReadinessStatus @default(NOT_STARTED)
+  note            String?
+  evidence        Json?
+  checkedAt       DateTime?
+  checkedByUserId String?
+  updatedAt       DateTime        @updatedAt
+  checkedBy       User?           @relation("ReadinessChecker", fields: [checkedByUserId], references: [id], onDelete: SetNull)
 }

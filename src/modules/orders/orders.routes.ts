@@ -7,7 +7,14 @@ import { HttpError } from '../../lib/http-error';
 import { routeParam } from '../../lib/route-param';
 import { requireAuth } from '../../middleware/auth';
 import { env } from '../../config/env';
-import { dollarsToCents, calculateOrderTotals } from '../../lib/money';
+import { evaluateFitment } from '../../services/fitment.service';
+import {
+  assertPaymentProviderAllowed,
+  commerceContext,
+  quoteGlobalCommerce,
+  resolveCommerceLines,
+  type CommerceLine,
+} from '../../services/global-commerce.service';
 import { allocateDiscountCents } from '../../lib/discount-allocation';
 import { createOrderNumber } from '../../lib/order-number';
 import { chooseSupplierForProduct } from '../../services/supplier-routing';
@@ -44,7 +51,8 @@ async function loadCheckoutCart(userId: string) {
         include: {
           product: {
             include: {
-              fitments: { select: { vehicleVariantId: true } },
+              fitments: { select: { vehicleVariantId: true, verified: true, compatibility: true, source: true, notes: true, verifiedAt: true } },
+              regionalPrices: { select: { regionKey: true, currency: true, priceCents: true } },
               supplierLinks: { where: { active: true }, include: { supplier: true } },
               seller: { select: { id: true, stripeConnectAccountId: true, stripeConnectPayoutsEnabled: true } },
             },
@@ -82,19 +90,68 @@ async function loadCheckoutCart(userId: string) {
     }
     if (item.product.requiresFitment && !item.product.isUniversal) {
       if (!item.fitmentVehicleVariantId) throw new HttpError(409, `Vehicle fitment is missing for ${item.product.name}`);
-      if (!item.product.fitments.some(f => f.vehicleVariantId === item.fitmentVehicleVariantId)) {
-        throw new HttpError(409, `${item.product.name} is not compatible with the selected vehicle`);
+      const fitment = evaluateFitment(item.product, item.fitmentVehicleVariantId);
+      if (fitment.status === 'DOES_NOT_FIT') {
+        throw new HttpError(409, `${item.product.name} is explicitly incompatible with the selected vehicle`);
       }
+      // UNKNOWN is not treated as a negative fit. Checkout requires an explicit
+      // acknowledgement for every unconfirmed vehicle-specific line.
     }
   }
   return cart;
 }
 
-function unitPriceForItem(item: Awaited<ReturnType<typeof loadCheckoutCart>>['items'][number]) {
+function baseUnitPriceForItem(item: Awaited<ReturnType<typeof loadCheckoutCart>>['items'][number]) {
   return effectiveOfferUnitPrice({
     productPriceCents: item.product.priceCents,
     quantity: item.quantity,
     offer: item.offer,
+  });
+}
+
+function unitPriceForItem(
+  item: Awaited<ReturnType<typeof loadCheckoutCart>>['items'][number],
+  unitPriceByCartItemId?: Map<string, number>,
+) {
+  return unitPriceByCartItemId?.get(item.id) ?? baseUnitPriceForItem(item);
+}
+
+function commerceLinesForCart(
+  cart: Awaited<ReturnType<typeof loadCheckoutCart>>,
+  supplierWarehouseByProductId = new Map<string, string | null>(),
+): CommerceLine[] {
+  return cart.items.map(item => ({
+    id: item.id,
+    productId: item.productId,
+    name: item.product.name,
+    quantity: item.quantity,
+    baseUnitPriceCents: baseUnitPriceForItem(item),
+    acceptedOffer: Boolean(item.offerId),
+    taxable: item.product.taxable,
+    sourceType: item.product.sourceType,
+    sellerShippingCents: item.product.sellerShippingCents,
+    weightGrams: item.product.weightGrams,
+    lengthMm: item.product.lengthMm,
+    widthMm: item.product.widthMm,
+    heightMm: item.product.heightMm,
+    hsCode: item.product.hsCode,
+    countryOfOrigin: item.product.countryOfOrigin,
+    customsDescription: item.product.customsDescription,
+    restrictedCountries: item.product.restrictedCountries,
+    warehouseCountry: supplierWarehouseByProductId.get(item.productId)
+      ?? item.product.supplierLinks.find(link => link.warehouseCountry)?.warehouseCountry
+      ?? item.product.countryOfOrigin,
+    regionalPrices: item.product.regionalPrices,
+  }));
+}
+
+function fitmentWarningsForCart(cart: Awaited<ReturnType<typeof loadCheckoutCart>>) {
+  return cart.items.flatMap(item => {
+    if (!item.product.requiresFitment || item.product.isUniversal || !item.fitmentVehicleVariantId) return [];
+    const result = evaluateFitment(item.product, item.fitmentVehicleVariantId);
+    return result.status === 'UNKNOWN'
+      ? [{ productId: item.productId, cartItemId: item.id, name: item.product.name, status: result.status, reason: result.reason }]
+      : [];
   });
 }
 
@@ -112,31 +169,35 @@ async function promoDiscount(code: string | undefined, subtotalCents: number) {
 }
 
 
-function discountAllocationsForCart(cart: Awaited<ReturnType<typeof loadCheckoutCart>>, discountCents: number) {
+function discountAllocationsForCart(
+  cart: Awaited<ReturnType<typeof loadCheckoutCart>>,
+  discountCents: number,
+  unitPriceByCartItemId: Map<string, number>,
+) {
   return allocateDiscountCents(
-    cart.items.map(item => ({ id: item.id, totalCents: unitPriceForItem(item) * item.quantity })),
+    cart.items.map(item => ({ id: item.id, totalCents: unitPriceForItem(item, unitPriceByCartItemId) * item.quantity })),
     discountCents,
   );
 }
 
-function totalsForCart(cart: Awaited<ReturnType<typeof loadCheckoutCart>>, discountCents = 0) {
-  const subtotalCents = cart.items.reduce((sum, item) => sum + unitPriceForItem(item) * item.quantity, 0);
-  const dropshipSubtotalCents = cart.items
-    .filter(item => item.product.sourceType === 'DROPSHIP')
-    .reduce((sum, item) => sum + unitPriceForItem(item) * item.quantity, 0);
-  const sellerShippingCents = cart.items
-    .filter(item => item.product.sourceType === 'MARKETPLACE')
-    .reduce((sum, item) => sum + item.product.sellerShippingCents * item.quantity, 0);
-
-  const base = calculateOrderTotals({
-    subtotalCents,
-    freeShippingThresholdCents: dollarsToCents(env.FREE_SHIPPING_THRESHOLD),
-    flatShippingCents: dropshipSubtotalCents > 0 ? dollarsToCents(env.FLAT_SHIPPING_RATE) : 0,
-    taxRate: env.DEFAULT_TAX_RATE,
-    discountCents,
+async function quoteCart(
+  cart: Awaited<ReturnType<typeof loadCheckoutCart>>,
+  shippingAddress: z.infer<typeof addressSchema>,
+  promoCode?: string,
+  supplierWarehouseByProductId = new Map<string, string | null>(),
+) {
+  const baseLines = commerceLinesForCart(cart, supplierWarehouseByProductId);
+  const resolvedLines = await resolveCommerceLines(baseLines, shippingAddress);
+  const unitPriceByCartItemId = new Map(resolvedLines.map(line => [line.id, line.unitPriceCents]));
+  const subtotalCents = cart.items.reduce((sum, item) => sum + unitPriceForItem(item, unitPriceByCartItemId) * item.quantity, 0);
+  const promo = await promoDiscount(promoCode, subtotalCents);
+  const discountByCartItemId = discountAllocationsForCart(cart, promo.discountCents, unitPriceByCartItemId);
+  const quote = await quoteGlobalCommerce({
+    address: shippingAddress,
+    lines: resolvedLines,
+    discountByLineId: discountByCartItemId,
   });
-  const shippingCents = base.shippingCents + sellerShippingCents;
-  return { ...base, shippingCents, totalCents: base.totalCents + sellerShippingCents };
+  return { quote, promo, unitPriceByCartItemId, discountByCartItemId };
 }
 
 function publicOrder(order: any) {
@@ -204,11 +265,40 @@ function publicOrder(order: any) {
 }
 
 ordersRouter.post('/quote', asyncHandler(async (req, res) => {
-  const body = z.object({ shippingAddress: addressSchema, promoCode: z.string().trim().max(50).optional() }).parse(req.body);
+  const body = z.object({
+    shippingAddress: addressSchema,
+    promoCode: z.string().trim().max(50).optional(),
+    displayCurrency: z.string().trim().length(3).optional(),
+  }).parse(req.body);
   const cart = await loadCheckoutCart(req.auth!.userId);
-  const subtotalCents = cart.items.reduce((sum, item) => sum + unitPriceForItem(item) * item.quantity, 0);
-  const promo = await promoDiscount(body.promoCode, subtotalCents);
-  res.json({ currency: env.CURRENCY, promoCode: promo.promo?.code ?? null, ...totalsForCart(cart, promo.discountCents) });
+  const assignments = await Promise.all(cart.items.map(async item => ({
+    item,
+    link: item.product.sourceType === 'DROPSHIP' ? await chooseSupplierForProduct(item.productId, item.quantity) : null,
+  })));
+  const warehouseByProductId = new Map(assignments.map(({ item, link }) => [item.productId, link?.warehouseCountry ?? null]));
+  const { quote, promo } = await quoteCart(cart, body.shippingAddress, body.promoCode, warehouseByProductId);
+  const display = await commerceContext(body.shippingAddress.country, body.displayCurrency);
+  res.json({
+    currency: env.CURRENCY,
+    settlementCurrency: quote.settlementCurrency,
+    displayCurrency: display.displayCurrency,
+    fxRate: display.fxRate,
+    displayOnly: true,
+    promoCode: promo.promo?.code ?? null,
+    subtotalCents: quote.subtotalCents,
+    shippingCents: quote.shippingCents,
+    taxCents: quote.taxCents,
+    dutyCents: quote.dutyCents,
+    discountCents: quote.discountCents,
+    totalCents: quote.totalCents,
+    taxJurisdiction: quote.taxJurisdiction,
+    taxRateBps: quote.taxRateBps,
+    taxInclusive: quote.taxInclusive,
+    importScheme: quote.importScheme,
+    shippingQuoteMeta: quote.shippingQuoteMeta,
+    allowedPaymentProviders: quote.allowedPaymentProviders,
+    fitmentWarnings: fitmentWarningsForCart(cart),
+  });
 }));
 
 ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
@@ -218,6 +308,8 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
     customerNote: z.string().max(1000).optional(),
     paymentProvider: z.enum(['stripe', 'paypal', 'bank_transfer']).default('stripe'),
     promoCode: z.string().trim().max(50).optional(),
+    displayCurrency: z.string().trim().length(3).optional(),
+    acknowledgedUnknownFitmentProductIds: z.array(z.string().min(1)).max(100).default([]),
   }).parse(req.body);
   const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
   if (!user) throw new HttpError(404, 'User not found');
@@ -227,14 +319,14 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
   if (body.paymentProvider === 'bank_transfer' && !env.BANK_TRANSFER_INSTRUCTIONS) throw new HttpError(503, 'Bank transfer is not configured');
 
   const cart = await loadCheckoutCart(user.id);
-  const subtotalBeforePromo = cart.items.reduce((sum, item) => sum + unitPriceForItem(item) * item.quantity, 0);
-  const promo = await promoDiscount(body.promoCode, subtotalBeforePromo);
-  const totals = totalsForCart(cart, promo.discountCents);
-  const discountByCartItemId = discountAllocationsForCart(cart, promo.discountCents);
-
-  const hasMarketplaceItems = cart.items.some(item => item.product.sourceType === 'MARKETPLACE');
-  if (hasMarketplaceItems && body.paymentProvider !== 'stripe') {
-    throw new HttpError(400, 'Marketplace carts require Stripe so seller payouts can be split securely through Stripe Connect');
+  const fitmentWarnings = fitmentWarningsForCart(cart);
+  const acknowledgedUnknown = new Set(body.acknowledgedUnknownFitmentProductIds);
+  const unacknowledged = fitmentWarnings.filter(warning => !acknowledgedUnknown.has(warning.productId));
+  if (unacknowledged.length) {
+    throw new HttpError(409, 'Confirm the unverified fitment warning before checkout', {
+      code: 'UNKNOWN_FITMENT_ACK_REQUIRED',
+      products: unacknowledged,
+    });
   }
 
   const assignments = await Promise.all(cart.items.map(async item => ({
@@ -243,6 +335,40 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
       ? await chooseSupplierForProduct(item.productId, item.quantity)
       : null,
   })));
+  const warehouseByProductId = new Map(assignments.map(({ item, link }) => [item.productId, link?.warehouseCountry ?? null]));
+  const { quote, promo, unitPriceByCartItemId, discountByCartItemId } = await quoteCart(
+    cart,
+    body.shippingAddress,
+    body.promoCode,
+    warehouseByProductId,
+  );
+  assertPaymentProviderAllowed(body.paymentProvider, quote.allowedPaymentProviders, body.shippingAddress.country);
+  const display = await commerceContext(body.shippingAddress.country, body.displayCurrency);
+
+  const hasMarketplaceItems = cart.items.some(item => item.product.sourceType === 'MARKETPLACE');
+  if (hasMarketplaceItems && body.paymentProvider !== 'stripe') {
+    throw new HttpError(400, 'Marketplace carts require Stripe so seller payouts can be split securely through Stripe Connect');
+  }
+  if (hasMarketplaceItems && !quote.allowedPaymentProviders.includes('stripe')) {
+    throw new HttpError(409, 'Stripe must be enabled for this destination before marketplace items can be purchased');
+  }
+
+  const orderTotals = {
+    subtotalCents: quote.subtotalCents,
+    shippingCents: quote.shippingCents,
+    taxCents: quote.taxCents,
+    discountCents: quote.discountCents,
+    dutyCents: quote.dutyCents,
+    totalCents: quote.totalCents,
+    taxJurisdiction: quote.taxJurisdiction,
+    taxRateBps: quote.taxRateBps,
+    taxInclusive: quote.taxInclusive,
+    importScheme: quote.importScheme,
+    displayCurrency: display.displayCurrency,
+    fxRate: display.fxRate,
+    shippingQuoteMeta: quote.shippingQuoteMeta as Prisma.InputJsonValue,
+  };
+  const subtotalBeforePromo = quote.subtotalCents;
 
   const order = await prisma.$transaction(async tx => {
     const promoReservedAt = promo.promo ? new Date() : undefined;
@@ -302,14 +428,14 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
         currency: env.CURRENCY,
         promoCode: promo.promo?.code,
         promoCountedAt: promoReservedAt,
-        ...totals,
+        ...orderTotals,
         shippingAddress: body.shippingAddress as Prisma.InputJsonValue,
         billingAddress: (body.billingAddress ?? body.shippingAddress) as Prisma.InputJsonValue,
         customerNote: body.customerNote,
         paymentProvider: body.paymentProvider,
         items: {
           create: assignments.map(({ item, link }) => {
-            const lineGrossCents = unitPriceForItem(item) * item.quantity;
+            const lineGrossCents = unitPriceForItem(item, unitPriceByCartItemId) * item.quantity;
             const lineDiscountCents = discountByCartItemId.get(item.id) ?? 0;
             const marketplaceNetCents = Math.max(0, lineGrossCents - lineDiscountCents);
             const marketplaceFeeCents = item.product.sourceType === 'MARKETPLACE'
@@ -320,7 +446,7 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
             sku: item.product.sku,
             name: item.product.name,
             quantity: item.quantity,
-            unitPriceCents: unitPriceForItem(item),
+            unitPriceCents: unitPriceForItem(item, unitPriceByCartItemId),
             totalPriceCents: lineGrossCents,
             discountCents: lineDiscountCents,
             offerId: item.offerId,
@@ -337,7 +463,11 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
             supplierStockReservedAt: link ? supplierReservationTime : undefined,
             supplierCostCents: link ? (link.costCents + link.shippingCents) * item.quantity : undefined,
             fitmentSnapshot: item.fitmentVehicleVariantId
-              ? ({ vehicleVariantId: item.fitmentVehicleVariantId } as Prisma.InputJsonValue)
+              ? ({
+                  vehicleVariantId: item.fitmentVehicleVariantId,
+                  ...evaluateFitment(item.product, item.fitmentVehicleVariantId),
+                  unknownFitmentAcknowledged: fitmentWarnings.some(warning => warning.productId === item.productId),
+                } as Prisma.InputJsonValue)
               : undefined,
             };
           }),

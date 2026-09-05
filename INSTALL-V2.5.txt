@@ -1,0 +1,40 @@
+SANDMAN V2.5 — SCAN-FIXED / READY FOR LOCAL VERIFY
+===================================================
+
+1. BACK UP your current working SANDMAN-backend folder.
+2. Extract this V2.5 ZIP.
+3. Overlay it onto:
+   C:\Users\asand\Downloads\SANDMAN-backend
+   without overwriting .env or .git.
+
+Example:
+robocopy "$env:USERPROFILE\Downloads\SANDMAN-V2.5-SCAN-FIXED" "$env:USERPROFILE\Downloads\SANDMAN-backend" /E /XD .git node_modules /XF .env /R:1 /W:1
+
+4. Open the project folder:
+cd "$env:USERPROFILE\Downloads\SANDMAN-backend"
+
+5. Install dependencies:
+npm install
+
+6. Run the full verifier:
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.5.ps1"
+
+7. ONLY IF IT PASSES:
+git add .
+git status --short
+
+Confirm .env is NOT listed, then:
+git commit -m "Upgrade SANDMAN to V2.5"
+git push
+
+RAILWAY
+Build: npm run prisma:generate && npm run build
+Pre-deploy: npm run prisma:deploy
+Start: node dist/src/server.js
+Healthcheck: /api/health
+
+IMPORTANT
+- V2.5 contains a new Prisma migration.
+- International commerce is fail-safe: unsupported tax/shipping destinations are blocked rather than silently undercharged.
+- Display FX does not change payment settlement currency.
+- External Stripe/PayPal/supplier/email/SMS/moderation/backups/etc. remain NEEDS TEST until real tests pass in Admin > Launch Readiness.

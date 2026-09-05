@@ -28,7 +28,7 @@ const optionalQueryBoolean = z.preprocess((value) => {
 const productInclude = {
   category: true,
   images: { orderBy: { position: 'asc' as const }, take: 1 },
-  fitments: { select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true } },
+  fitments: { select: { vehicleVariantId: true, verified: true, compatibility: true, source: true, notes: true, verifiedAt: true } },
   supplierLinks: {
     where: { active: true },
     select: {
@@ -73,7 +73,7 @@ v2Router.get('/catalog/status', asyncHandler(async (_req, res) => {
     prisma.productFitment.count(),
     prisma.supplier.count({ where: { active: true } }),
   ]);
-  res.json({ version: '2.4.1', vehicles: { makes, models, variants }, products: { total: products, active: activeProducts }, fitments: { total: fitments, verified: verifiedFitments }, activeSuppliers: suppliers });
+  res.json({ version: '2.5.0', vehicles: { makes, models, variants }, products: { total: products, active: activeProducts }, fitments: { total: fitments, verified: verifiedFitments }, activeSuppliers: suppliers });
 }));
 
 
@@ -200,7 +200,7 @@ v2Router.get('/vehicles/resolve', asyncHandler(async (req, res) => {
 v2Router.get('/fitment/check', asyncHandler(async (req, res) => {
   const query = z.object({ productId: z.string().min(1), vehicleVariantId: z.string().min(1) }).parse(req.query);
   const [product, vehicle] = await Promise.all([
-    prisma.product.findFirst({ where: { id: query.productId, status: 'ACTIVE' }, include: { fitments: { select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true } } } }),
+    prisma.product.findFirst({ where: { id: query.productId, status: 'ACTIVE' }, include: { fitments: { select: { vehicleVariantId: true, verified: true, compatibility: true, source: true, notes: true, verifiedAt: true } } } }),
     prisma.vehicleVariant.findUnique({ where: { id: query.vehicleVariantId }, include: { model: { include: { make: true } } } }),
   ]);
   if (!product) throw new HttpError(404, 'Product not found');
@@ -212,7 +212,7 @@ v2Router.post('/fitment/check-batch', asyncHandler(async (req, res) => {
   const body = z.object({ productIds: z.array(z.string().min(1)).min(1).max(100), vehicleVariantId: z.string().min(1) }).parse(req.body);
   const products = await prisma.product.findMany({
     where: { id: { in: body.productIds }, status: 'ACTIVE' },
-    select: { id: true, requiresFitment: true, isUniversal: true, fitments: { select: { vehicleVariantId: true, verified: true, source: true, notes: true, verifiedAt: true } } },
+    select: { id: true, requiresFitment: true, isUniversal: true, fitments: { select: { vehicleVariantId: true, verified: true, compatibility: true, source: true, notes: true, verifiedAt: true } } },
   });
   res.json(products.map(product => ({ productId: product.id, ...evaluateFitment(product, body.vehicleVariantId) })));
 }));
@@ -312,17 +312,18 @@ v2Router.get('/checkout/preflight', requireAuth, asyncHandler(async (req, res) =
   if (!cart || !cart.items.length) return res.json({ ready: false, issues: [{ code: 'EMPTY_CART', message: 'Your cart is empty' }], items: [] });
 
   const issues: Array<{ code: string; message: string; productId?: string }> = [];
+  const warnings: Array<{ code: string; message: string; productId?: string; acknowledgementRequired?: boolean }> = [];
   const items = cart.items.map((item: any) => {
     const fitment = evaluateFitment(item.product, item.fitmentVehicleVariantId);
     const availability = publicAvailability(item.product);
     if (item.product.requiresFitment && !item.product.isUniversal && !item.fitmentVehicleVariantId) issues.push({ code: 'VEHICLE_REQUIRED', message: `${item.product.name} requires a vehicle selection`, productId: item.productId });
-    if (item.product.requiresFitment && !item.product.isUniversal && item.fitmentVehicleVariantId && fitment.status === 'UNKNOWN') issues.push({ code: 'FITMENT_UNVERIFIED', message: `${item.product.name} has no fitment record for the selected vehicle`, productId: item.productId });
+    if (item.product.requiresFitment && !item.product.isUniversal && item.fitmentVehicleVariantId && fitment.status === 'UNKNOWN') warnings.push({ code: 'FITMENT_UNVERIFIED', message: `${item.product.name} has no confirmed fitment record for the selected vehicle`, productId: item.productId, acknowledgementRequired: true });
     if (fitment.status === 'DOES_NOT_FIT') issues.push({ code: 'FITMENT_CONFLICT', message: `${item.product.name} is explicitly incompatible with the selected vehicle`, productId: item.productId });
     if (!availability.inStock) issues.push({ code: 'OUT_OF_STOCK', message: `${item.product.name} is currently unavailable`, productId: item.productId });
     if (availability.quantity != null && availability.quantity < item.quantity) issues.push({ code: 'INSUFFICIENT_STOCK', message: `${item.product.name} has less stock than the quantity in your cart`, productId: item.productId });
     return { id: item.id, productId: item.productId, name: item.product.name, quantity: item.quantity, fitment, availability };
   });
-  res.json({ ready: issues.length === 0, issues, items });
+  res.json({ ready: issues.length === 0, issues, warnings, items });
 }));
 
 v2Router.post('/requests/vehicle', optionalAuth, asyncHandler(async (req, res) => {
@@ -397,7 +398,7 @@ v2Router.post('/build-advisor', asyncHandler(async (req, res) => {
   };
   const priorities = priorityByGoal[body.goal] ?? priorityByGoal.STREET!;
   const products = await prisma.product.findMany({
-    where: { status: 'ACTIVE', OR: [{ isUniversal: true }, { fitments: { some: { vehicleVariantId: vehicle.id } } }] },
+    where: { status: 'ACTIVE', OR: [{ isUniversal: true }, { fitments: { some: { vehicleVariantId: vehicle.id, compatibility: 'FITS' } } }] },
     include: productInclude,
     orderBy: [{ purchaseCount: 'desc' }, { viewCount: 'desc' }],
     take: 120,

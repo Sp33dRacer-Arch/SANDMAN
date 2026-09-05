@@ -266,8 +266,11 @@
       else if (view === 'sourcing') await renderSourcing();
       else if (view === 'fulfillment') await renderFulfillment();
       else if (view === 'operations') await renderOperations();
-      else if (view === 'customers') await renderCustomers();
+      else if (view === 'customers') await renderCustomerIntelligence();
+      else if (view === 'commerce') await renderCommerce();
+      else if (view === 'analytics') await renderAnalyticsV25();
       else if (view === 'trust') await renderTrust();
+      else if (view === 'readiness') await renderReadiness();
       else if (view === 'settings') await renderSettings();
     } catch (error) {
       viewRoot.innerHTML = `<div class="empty-state"><div><b>Could not load this page</b><span>${esc(error.message)}</span></div></div>`;
@@ -514,17 +517,86 @@
     viewRoot.innerHTML = `<section class="data-panel"><div class="table-wrap"><table><thead><tr><th>Order</th><th>Supplier</th><th>Status</th><th>Supplier order</th><th>Carrier</th><th>Tracking</th><th>Updated</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
   }
 
-  async function renderCustomers(filters = {}) {
-    heading('Customers', 'Customer accounts, garage usage and lifetime spend.');
+  async function renderCustomerIntelligence(filters = {}) {
+    heading('Customer Intelligence', 'Customer 360° records, value, purchases, Garage, marketplace activity, support and trust.');
     const qs = new URLSearchParams();
     if (filters.q) qs.set('q', filters.q);
-    const customers = await api(`/api/admin/customers?${qs}`);
-    state.cache.customers = customers;
-    const rows = customers.length ? customers.map(customer => `
-      <tr><td><div class="cell-title"><span class="avatar">${esc((customer.firstName?.[0] || customer.email[0] || 'C').toUpperCase())}</span><div class="cell-title-copy"><strong>${esc([customer.firstName, customer.lastName].filter(Boolean).join(' ') || 'Customer')}</strong><small>${esc(customer.email)}</small></div></div></td><td>${esc(customer.phone || '—')}</td><td>${esc(customer._count.orders)}</td><td>${esc(customer._count.garage)}</td><td><strong>${esc(money(customer.totalSpentCents))}</strong></td><td>${badge(customer.isActive ? 'ACTIVE' : 'ARCHIVED')}</td><td>${esc(shortDate(customer.createdAt))}</td></tr>`).join('') : `<tr><td colspan="7"><div class="empty-state"><div><b>No customers yet</b><span>Registered shoppers will appear here.</span></div></div></td></tr>`;
-    viewRoot.innerHTML = `<div class="toolbar"><div class="toolbar-left"><input id="customer-search" type="search" value="${esc(filters.q || '')}" placeholder="Search customer name or email…" /></div><div class="toolbar-right"><span class="date-chip">${customers.length} CUSTOMERS</span></div></div><section class="data-panel"><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Phone</th><th>Orders</th><th>Garage</th><th>Lifetime spend</th><th>Status</th><th>Joined</th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    if (filters.status) qs.set('status', filters.status);
+    if (filters.sort) qs.set('sort', filters.sort);
+    const [summary, data] = await Promise.all([
+      api('/api/admin/customer-intelligence/summary'),
+      api(`/api/admin/customer-intelligence/customers?${qs}`),
+    ]);
+    state.cache.customers = data.items;
+    const rows = data.items.length ? data.items.map(customer => `<tr>
+      <td><div class="cell-title"><span class="avatar">${esc((customer.firstName?.[0]||customer.email[0]||'C').toUpperCase())}</span><div class="cell-title-copy"><strong>${esc([customer.firstName,customer.lastName].filter(Boolean).join(' ')||customer.username||'Customer')}</strong><small>${esc(customer.email)}${customer.country?` · ${esc(customer.country)}`:''}</small></div></div></td>
+      <td><strong>${esc(money(customer.netLifetimeValueCents))}</strong><br><span class="subtle">gross ${esc(money(customer.grossPaidSpendCents))} · refunds ${esc(money(customer.refundCents))}</span></td>
+      <td>${esc(customer.paidOrderCount)}<br><span class="subtle">AOV ${esc(money(customer.averageOrderValueCents))}</span></td>
+      <td><div class="customer-tag-list">${[...customer.segments,...customer.tags].slice(0,5).map(tag=>`<span>${esc(tag.replaceAll('_',' '))}</span>`).join('')||'<span>STANDARD</span>'}</div></td>
+      <td>${customer.emailVerifiedAt?'EMAIL ✓':'EMAIL —'}<br><span class="subtle">${customer.phoneVerifiedAt?'PHONE ✓':'PHONE —'} · ${customer.twoFactorEnabled?'2FA ✓':'2FA —'}</span></td>
+      <td>${badge(customer.isActive?'ACTIVE':'INACTIVE')}</td>
+      <td>${esc(shortDate(customer.lastActivityAt||customer.createdAt))}</td>
+      <td><button class="table-action" data-action="view-customer-360" data-id="${esc(customer.id)}">360° →</button></td>
+    </tr>`).join('') : '<tr><td colspan="8"><div class="empty-state"><div><b>No matching customers</b><span>Try another search or segment.</span></div></div></td></tr>';
+    viewRoot.innerHTML = `<section class="metric-grid customer-metrics">${metric('Customers',summary.customerCount,`${summary.activeCount} active`,'◉')}${metric('Net customer revenue',money(summary.netRevenueCents),`Gross ${money(summary.grossRevenueCents)} · Refunds ${money(summary.refundsCents)}`,'$')}${metric('Avg customer value',money(summary.avgCustomerValueCents),`${summary.customersWithOrders} buyers`,'◇')}${metric('Repeat purchase',`${Math.round(summary.repeatPurchaseRate*100)}%`,`${summary.repeatCustomers} repeat buyers`,'↻')}</section>
+      <div class="toolbar"><div class="toolbar-left"><input id="customer-search" type="search" value="${esc(filters.q||'')}" placeholder="Name, email, username, phone or order…"><select id="customer-status"><option value="ALL">All customers</option>${['ACTIVE','INACTIVE','VERIFIED','DEALER','HIGH_VALUE','VIP','AT_RISK'].map(v=>`<option value="${v}" ${filters.status===v?'selected':''}>${v.replaceAll('_',' ')}</option>`).join('')}</select><select id="customer-sort">${[['newest','Newest'],['activity_desc','Last active'],['spend_desc','Highest net value'],['orders_desc','Most orders'],['oldest','Oldest']].map(([v,l])=>`<option value="${v}" ${filters.sort===v?'selected':''}>${l}</option>`).join('')}</select></div><div class="toolbar-right"><span class="date-chip">${esc(data.total)} RECORDS</span></div></div>
+      <section class="data-panel"><div class="table-wrap"><table><thead><tr><th>Customer</th><th>Net lifetime value</th><th>Orders</th><th>Segments / tags</th><th>Verification</th><th>Status</th><th>Last active</th><th></th></tr></thead><tbody>${rows}</tbody></table></div></section>`;
+    enhanceResponsiveTables(viewRoot);
+  }
+  const renderCustomers = renderCustomerIntelligence;
+
+  async function openCustomer360(id) {
+    const data = await api(`/api/admin/customer-intelligence/customers/${encodeURIComponent(id)}`);
+    const c=data.customer,m=data.metrics;
+    const orders=data.orders.length?data.orders.map(order=>`<tr><td><strong>${esc(order.orderNumber)}</strong><br><span class="subtle">${esc(shortDate(order.createdAt))}</span></td><td>${badge(order.status)}</td><td>${badge(order.paymentStatus)}</td><td>${esc(order.items.length)}</td><td><strong>${esc(money(order.totalCents,order.currency))}</strong></td><td><button class="table-action" data-action="view-order" data-id="${esc(order.id)}">OPEN →</button></td></tr>`).join(''):'<tr><td colspan="6">No orders.</td></tr>';
+    const garage=data.garage.length?data.garage.map(g=>`<article class="customer-vehicle"><span>${g.isPrimary?'PRIMARY VEHICLE':'GARAGE'}</span><strong>${esc(`${g.year} ${g.vehicleVariant.model.make.name} ${g.vehicleVariant.model.name}`)}</strong><small>${esc(g.vehicleVariant.engineCode)}${g.vehicleVariant.chassisCode?` · ${esc(g.vehicleVariant.chassisCode)}`:''}${g.maskedVin?` · VIN ${esc(g.maskedVin)}`:''}</small></article>`).join(''):'<p class="subtle">No Garage vehicles.</p>';
+    const support=data.supportCases.length?data.supportCases.map(item=>`<div class="timeline-row"><strong>${esc(item.type.replaceAll('_',' '))} · ${esc(item.status.replaceAll('_',' '))}</strong><small>${esc(item.order?.orderNumber||'No order')} · ${esc(shortDate(item.createdAt))}</small></div>`).join(''):'<span class="subtle">No support cases.</span>';
+    const wishlist=data.wishlist.length?data.wishlist.map(item=>`<div class="timeline-row"><strong>${esc(item.product.name)}</strong><small>${esc(item.product.sku)} · ${esc(money(item.product.priceCents,item.product.currency))}</small></div>`).join(''):'<span class="subtle">No wishlist items.</span>';
+    const reviews=data.reviews.length?data.reviews.map(item=>`<div class="timeline-row"><strong>${esc(item.rating)}★ · ${esc(item.product.name)}</strong><small>${item.verifiedPurchase?'Verified purchase · ':''}${esc(shortDate(item.createdAt))}</small></div>`).join(''):'<span class="subtle">No reviews.</span>';
+    const listings=data.listings.length?data.listings.map(item=>`<div class="timeline-row"><strong>${esc(item.name)}</strong><small>${esc(item.status)} · ${esc(money(item.priceCents,item.currency))} · ${esc(item.purchaseCount)} sold</small></div>`).join(''):'<span class="subtle">No marketplace listings.</span>';
+    const notes=data.notes.length?data.notes.map(note=>`<div class="customer-note"><p>${esc(note.body)}</p><small>${esc([note.author.firstName,note.author.lastName].filter(Boolean).join(' ')||note.author.email)} · ${esc(dateTime(note.createdAt))}</small>${state.user?.role==='ADMIN'?`<button class="table-action" data-action="delete-customer-note" data-customer-id="${esc(c.id)}" data-note-id="${esc(note.id)}">DELETE</button>`:''}</div>`).join(''):'<p class="subtle">No internal staff notes.</p>';
+    const tags=data.tags.map(row=>`<button class="customer-tag" data-action="remove-customer-tag" data-customer-id="${esc(c.id)}" data-tag="${encodeURIComponent(row.tag)}">${esc(row.tag.replaceAll('_',' '))} ×</button>`).join('');
+    const security=data.security.restricted?`<p class="subtle">Detailed IP/session history is restricted to ADMIN. 7-day summary: ${esc(data.security.summary.failedLogins7d)} failed logins · ${esc(data.security.summary.newDeviceLogins7d)} new-device events · ${esc(data.security.summary.openReports)} open reports.</p>`:(data.security.sessions.length?data.security.sessions.filter(x=>!x.revokedAt).slice(0,8).map(x=>`<div class="timeline-row"><strong>${esc(x.userAgent||'Unknown device')}</strong><small>${esc(x.ipAddress||'IP unavailable')} · ${esc(dateTime(x.lastUsedAt))}</small></div>`).join(''):'<span class="subtle">No active sessions.</span>');
+    const timeline=data.timeline.length?data.timeline.map(item=>`<div class="customer-timeline-row"><span>${esc(item.type)}</span><strong>${esc(item.label)}</strong><small>${esc(dateTime(item.at))}</small></div>`).join(''):'<span class="subtle">No timeline activity.</span>';
+    openModal(`<div class="modal-header"><div><span class="subtle">CUSTOMER 360° / ${esc(c.id)}</span><h2>${esc([c.firstName,c.lastName].filter(Boolean).join(' ')||c.username||'Customer')}</h2><p>${esc(c.email)} · Joined ${esc(shortDate(c.createdAt))}</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body customer-360">
+      <section class="customer-hero-grid"><div class="customer-identity-card"><span class="avatar avatar-xl">${esc((c.firstName?.[0]||c.email[0]||'C').toUpperCase())}</span><div><strong>${esc(c.email)}</strong><small>${esc(c.phone||'No phone')} · ${esc(c.country||'Country unknown')}</small><div class="customer-tag-list">${data.segments.map(x=>`<span>${esc(x.replaceAll('_',' '))}</span>`).join('')}</div></div></div><div class="detail-box"><span>Net LTV</span><strong>${esc(money(m.netLifetimeValueCents))}</strong><small>Gross ${esc(money(m.grossPaidSpendCents))}</small></div><div class="detail-box"><span>Refunds</span><strong>${esc(money(m.refundCents))}</strong><small>${esc(m.paidOrderCount)} paid orders</small></div><div class="detail-box"><span>AOV</span><strong>${esc(money(m.averageOrderValueCents))}</strong><small>${esc(m.daysSinceLastPurchase??'—')} days since purchase</small></div><div class="detail-box"><span>Risk</span><strong>${badge(data.risk.level)}</strong><small>Score ${esc(data.risk.score)}/100</small></div></section>
+      <section class="customer-360-section"><div class="panel-header"><h3>Admin tags</h3><button class="btn" data-action="add-customer-tag" data-customer-id="${esc(c.id)}">＋ Tag</button></div><div class="customer-tag-list">${tags||'<span class="subtle">No admin tags.</span>'}</div></section>
+      <section class="customer-360-section"><h3>Orders & purchases</h3><div class="table-wrap"><table><thead><tr><th>Order</th><th>Status</th><th>Payment</th><th>Items</th><th>Total</th><th></th></tr></thead><tbody>${orders}</tbody></table></div></section>
+      <section class="customer-360-section"><h3>My Garage</h3><div class="customer-vehicle-grid">${garage}</div></section>
+      <section class="customer-360-section"><h3>Marketplace / dealer</h3>${data.seller?`<div class="detail-grid"><div class="detail-box"><span>Store</span><strong>${esc(data.seller.storeName||'Seller')}</strong></div><div class="detail-box"><span>Sales</span><strong>${esc(data.seller.totalSales||0)}</strong></div><div class="detail-box"><span>Rating</span><strong>${Number(data.seller.ratingAverage||0).toFixed(1)}</strong></div><div class="detail-box"><span>Dealer</span><strong>${data.seller.dealerVerifiedAt?'VERIFIED':'NO'}</strong></div></div>`:'<p class="subtle">Not currently a seller.</p>'}<div class="customer-subgrid"><div><h4>Listings</h4>${listings}</div><div><h4>Wishlist</h4>${wishlist}</div><div><h4>Reviews</h4>${reviews}</div></div></section>
+      <section class="customer-360-section"><h3>Support, returns & buyer protection</h3><div class="timeline">${support}</div></section>
+      <section class="customer-360-section"><h3>Security</h3><div class="detail-grid"><div class="detail-box"><span>Email</span><strong>${c.emailVerified?'VERIFIED':'UNVERIFIED'}</strong></div><div class="detail-box"><span>Phone</span><strong>${c.phoneVerified?'VERIFIED':'UNVERIFIED'}</strong></div><div class="detail-box"><span>2FA</span><strong>${c.twoFactorEnabled?'ENABLED':'OFF'}</strong></div><div class="detail-box"><span>Last activity</span><strong>${esc(shortDate(m.lastActivityAt))}</strong></div></div><div class="timeline">${security}</div></section>
+      <section class="customer-360-section"><div class="panel-header"><h3>Internal staff notes</h3><button class="btn" data-action="add-customer-note" data-customer-id="${esc(c.id)}">＋ Note</button></div>${notes}</section>
+      <section class="customer-360-section"><h3>Customer timeline</h3><div class="customer-timeline">${timeline}</div></section>
+      </div><div class="modal-footer">${state.user?.role==='ADMIN'?`<button class="btn ${c.isActive?'btn-danger':''}" data-action="toggle-customer-status" data-id="${esc(c.id)}" data-active="${c.isActive?'true':'false'}">${c.isActive?'Deactivate account':'Reactivate account'}</button>`:''}<button class="btn" data-modal-close>Close</button></div>`,'modal-xl');
+    enhanceResponsiveTables(modalRoot);
   }
 
+  async function renderCommerce() {
+    heading('Global Commerce', 'Settlement currency, country rules, FX display, tax/VAT and shipping zones.', state.user?.role==='ADMIN'?'<button class="btn" data-action="commerce-add-region">＋ Region</button><button class="btn" data-action="commerce-add-fx">＋ FX</button><button class="btn" data-action="commerce-add-tax">＋ Tax</button><button class="btn btn-primary" data-action="commerce-add-zone">＋ Shipping zone</button>':'');
+    const data=await api('/api/admin/commerce/overview');
+    const regions=data.regions.length?data.regions.map(r=>`<tr><td><strong>${esc(r.country)}</strong></td><td>${esc(r.locale)}</td><td>${esc(r.currency)}</td><td>${r.shippingAllowed?'YES':'NO'}</td><td>${r.taxRequired?'YES':'NO'}</td><td>${r.dutiesRequired?'YES':'NO'}</td><td>${esc(Array.isArray(r.paymentMethods)?r.paymentMethods.join(', '):'—')}</td></tr>`).join(''):'<tr><td colspan="7">No commerce regions configured.</td></tr>';
+    const fx=data.rates.length?data.rates.map(r=>`<tr><td>${esc(r.baseCurrency)} → ${esc(r.quoteCurrency)}</td><td><strong>${esc(r.rate)}</strong></td><td>${esc(r.source)}</td><td>${esc(dateTime(r.fetchedAt))}</td></tr>`).join(''):'<tr><td colspan="4">No FX rates.</td></tr>';
+    const taxes=data.taxRules.length?data.taxRules.map(r=>`<tr><td>${esc(r.country)}${r.region?`-${esc(r.region)}`:''}</td><td>${esc(r.label)}</td><td>${esc(r.taxType)}</td><td>${(r.rateBps/100).toFixed(2)}%</td><td>${r.taxInclusive?'Inclusive':'Exclusive'}</td><td>${badge(r.active?'ACTIVE':'ARCHIVED')}</td></tr>`).join(''):'<tr><td colspan="6">No tax rules.</td></tr>';
+    const zones=data.zones.length?data.zones.map(z=>`<tr><td><strong>${esc(z.name)}</strong></td><td>${esc(Array.isArray(z.countries)?z.countries.join(', '):'—')}</td><td>${esc(money(z.rateCents,z.currency))}</td><td>${z.freeShippingThresholdCents==null?'—':esc(money(z.freeShippingThresholdCents,z.currency))}</td><td>${esc([z.minDays,z.maxDays].filter(v=>v!=null).join('–')||'—')}</td><td>${badge(z.active?'ACTIVE':'ARCHIVED')}</td></tr>`).join(''):'<tr><td colspan="6">No shipping zones.</td></tr>';
+    viewRoot.innerHTML=`<section class="metric-grid">${metric('Regions',data.regions.length,'Country rules','◎')}${metric('FX rates',data.rates.length,'Display-only conversion','$')}${metric('Tax rules',data.taxRules.length,'VAT / sales tax','%')}${metric('Shipping zones',data.zones.length,'Destination coverage','↗')}</section><section class="data-panel"><div class="panel-header"><h2>Commerce regions</h2><span class="subtle">Checkout fails closed without destination configuration.</span></div><div class="table-wrap"><table><thead><tr><th>Country</th><th>Locale</th><th>Currency</th><th>Shipping</th><th>Tax req.</th><th>Duties req.</th><th>Payments</th></tr></thead><tbody>${regions}</tbody></table></div></section><section class="dashboard-grid"><div class="data-panel"><div class="panel-header"><h2>FX rates</h2></div><div class="table-wrap"><table><thead><tr><th>Pair</th><th>Rate</th><th>Source</th><th>Updated</th></tr></thead><tbody>${fx}</tbody></table></div></div><div class="data-panel"><div class="panel-header"><h2>Tax / VAT rules</h2></div><div class="table-wrap"><table><thead><tr><th>Jurisdiction</th><th>Rule</th><th>Type</th><th>Rate</th><th>Mode</th><th>Status</th></tr></thead><tbody>${taxes}</tbody></table></div></div></section><section class="data-panel"><div class="panel-header"><h2>Shipping zones</h2><span class="subtle">Settlement-currency fallback rates or live carrier quotes</span></div><div class="table-wrap"><table><thead><tr><th>Zone</th><th>Countries</th><th>Rate</th><th>Free threshold</th><th>Days</th><th>Status</th></tr></thead><tbody>${zones}</tbody></table></div></section>`;
+    enhanceResponsiveTables(viewRoot);
+  }
+
+  async function renderReadiness() {
+    heading('Launch Readiness','Configuration, live certification and recovery gates for production.');
+    const data=await api('/api/admin/readiness');
+    const categories=[...new Set(data.checks.map(x=>x.category))];
+    viewRoot.innerHTML=`<section class="readiness-hero"><div class="readiness-score"><strong>${esc(data.score)}%</strong><span>LAUNCH READINESS</span></div><div><h2>Production is evidence, not environment variables.</h2><p>Automatic failures cannot be hidden with a manual PASS. External providers remain NEEDS TEST until the real workflow succeeds.</p></div></section>${categories.map(category=>`<section class="data-panel readiness-section"><div class="panel-header"><h2>${esc(category)}</h2></div><div class="readiness-list">${data.checks.filter(x=>x.category===category).map(x=>`<article class="readiness-row"><div><strong>${esc(x.label)}</strong><small>${esc(x.detail)}</small>${x.note?`<small>NOTE · ${esc(x.note)}</small>`:''}</div><div>${badge(x.status)}</div>${state.user?.role==='ADMIN'&&!x.automatic?`<button class="table-action" data-action="readiness-update" data-key="${esc(x.key)}" data-status="${esc(x.status)}">UPDATE →</button>`:'<span></span>'}</article>`).join('')}</div></section>`).join('')}`;
+  }
+
+  async function renderAnalyticsV25() {
+    heading('Analytics','Consent-aware first-party commerce analytics and funnel health.');
+    const data=await api('/api/admin/analytics/summary'),f=data.funnel;
+    const rows=data.topPaths.length?data.topPaths.map(x=>`<tr><td>${esc(x.path)}</td><td>${esc(x.views)}</td></tr>`).join(''):'<tr><td colspan="2">No page-view analytics yet.</td></tr>';
+    viewRoot.innerHTML=`<section class="metric-grid">${metric('Product views',f.productViews,'Last 30 days','◉')}${metric('Add to cart',f.addToCart,'Consent-aware','＋')}${metric('Checkout starts',f.beginCheckout,'Funnel','→')}${metric('Purchases',f.purchases,'Tracked events','✓')}</section><section class="dashboard-grid"><div class="data-panel"><div class="panel-header"><h2>Top paths</h2></div><div class="table-wrap"><table><thead><tr><th>Path</th><th>Views</th></tr></thead><tbody>${rows}</tbody></table></div></div><div class="data-panel"><div class="panel-header"><h2>Consent</h2></div><div class="detail-grid"><div class="detail-box"><span>Consent records</span><strong>${esc(data.consent.records)}</strong></div><div class="detail-box"><span>Analytics opt-in</span><strong>${Math.round(data.consent.analyticsOptInRate*100)}%</strong></div><div class="detail-box"><span>Marketing opt-in</span><strong>${Math.round(data.consent.marketingOptInRate*100)}%</strong></div></div></div></section>`;
+    enhanceResponsiveTables(viewRoot);
+  }
 
   async function renderOperations() {
     heading('Operations', 'Money, growth, supplier sync, pricing, promotions, fraud and buyer protection.');
@@ -651,6 +723,15 @@
           <label class="field"><span>Slug</span><input name="slug" required value="${esc(product?.slug || '')}" placeholder="b58-upgraded-intercooler" ${product ? 'disabled' : ''} /></label>
           <label class="field"><span>Brand</span><input name="brand" maxlength="120" value="${esc(product?.brand || '')}" placeholder="SANDMAN Performance" /></label>
           <label class="field"><span>Manufacturer part no.</span><input name="manufacturerPn" maxlength="120" value="${esc(product?.manufacturerPn || '')}" placeholder="OEM / supplier cross-reference" /></label>
+          <label class="field"><span>HS / customs code</span><input name="hsCode" maxlength="32" value="${esc(product?.hsCode || '')}" placeholder="8708.99" /></label>
+          <label class="field"><span>Country of origin</span><input name="countryOfOrigin" maxlength="2" value="${esc(product?.countryOfOrigin || '')}" placeholder="CN" /></label>
+          <label class="field span-2"><span>Customs description</span><input name="customsDescription" maxlength="500" value="${esc(product?.customsDescription || '')}" placeholder="Automotive engine component" /></label>
+          <label class="field span-2"><span>Restricted destination countries (comma-separated)</span><input name="restrictedCountries" value="${esc(Array.isArray(product?.restrictedCountries)?product.restrictedCountries.join(', '):'')}" placeholder="US, CA" /></label>
+          <label class="field"><span>Taxable</span><select name="taxable"><option value="true" ${product?.taxable!==false?'selected':''}>Yes</option><option value="false" ${product?.taxable===false?'selected':''}>No</option></select></label>
+          <label class="field"><span>Weight (grams)</span><input name="weightGrams" type="number" min="1" value="${esc(product?.weightGrams ?? '')}" /></label>
+          <label class="field"><span>Length (mm)</span><input name="lengthMm" type="number" min="1" value="${esc(product?.lengthMm ?? '')}" /></label>
+          <label class="field"><span>Width (mm)</span><input name="widthMm" type="number" min="1" value="${esc(product?.widthMm ?? '')}" /></label>
+          <label class="field"><span>Height (mm)</span><input name="heightMm" type="number" min="1" value="${esc(product?.heightMm ?? '')}" /></label>
           <label class="field"><span>Category</span><select name="categoryId" required><option value="">Choose category</option>${categoryOptions}</select></label>
           <label class="field"><span>Retail price (USD)</span><input name="price" type="number" step="0.01" min="0" required value="${product ? (product.priceCents / 100).toFixed(2) : ''}" placeholder="399.99" /></label>
           <label class="field"><span>Compare-at price</span><input name="compareAt" type="number" step="0.01" min="0" value="${product?.compareAtCents ? (product.compareAtCents / 100).toFixed(2) : ''}" placeholder="449.99" /></label>
@@ -712,6 +793,15 @@
       name: String(fd.get('name') || ''),
       brand: optionalString(fd.get('brand')),
       manufacturerPn: optionalString(fd.get('manufacturerPn')),
+      hsCode: optionalString(fd.get('hsCode')),
+      countryOfOrigin: optionalString(fd.get('countryOfOrigin'))?.toUpperCase(),
+      customsDescription: optionalString(fd.get('customsDescription')),
+      restrictedCountries: String(fd.get('restrictedCountries')||'').split(',').map(v=>v.trim().toUpperCase()).filter(v=>v.length===2),
+      taxable: String(fd.get('taxable')) !== 'false',
+      weightGrams: fd.get('weightGrams') === '' ? undefined : Number(fd.get('weightGrams')),
+      lengthMm: fd.get('lengthMm') === '' ? undefined : Number(fd.get('lengthMm')),
+      widthMm: fd.get('widthMm') === '' ? undefined : Number(fd.get('widthMm')),
+      heightMm: fd.get('heightMm') === '' ? undefined : Number(fd.get('heightMm')),
       description: String(fd.get('description') || ''),
       shortDesc: optionalString(fd.get('shortDesc')),
       categoryId: String(fd.get('categoryId') || ''),
@@ -781,29 +871,29 @@
 
   async function openFitmentModal(productId) {
     const [product, variants] = await Promise.all([api(`/api/admin/products/${productId}`), api('/api/admin/vehicles?limit=300')]);
-    const selected = new Set(product.fitments.map(f => f.vehicleVariantId));
-    const verified = new Set(product.fitments.filter(f => f.verified).map(f => f.vehicleVariantId));
-    const options = variants.map(v => `<div class="fitment-option"><input type="checkbox" name="variant" value="${esc(v.id)}" ${selected.has(v.id) ? 'checked' : ''} /><span><strong>${esc(v.model.make.name)} ${esc(v.model.name)} ${v.trim ? `· ${esc(v.trim)}` : ''}</strong><small>${esc(v.yearStart)}–${esc(v.yearEnd)} · ${esc(v.chassisCode || 'chassis n/a')} · ${esc(v.engineName)}</small></span><label class="verify-toggle" title="Verified compatibility"><input type="checkbox" name="verifiedVariant" value="${esc(v.id)}" ${verified.has(v.id) ? 'checked' : ''} /><span>${verified.has(v.id) ? 'VERIFIED' : 'VERIFY'}</span></label><code>${esc(v.engineCode)}</code></div>`).join('');
-    openModal(`<form id="fitment-form" data-product-id="${esc(productId)}" data-existing="${esc(JSON.stringify([...selected]))}" data-existing-verified="${esc(JSON.stringify([...verified]))}"><div class="modal-header"><div><h2>Manage fitment</h2><p>${esc(product.name)} · ${esc(product.sku)}</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="toolbar" style="margin-bottom:12px"><div class="toolbar-left" style="width:100%"><input id="fitment-filter" type="search" placeholder="Filter make, model or engine code…" style="width:100%" /></div><div class="toolbar-right"><select name="fitmentSource" title="Evidence source"><option>MANUAL</option><option>OEM</option><option>SUPPLIER</option><option>IMPORTED</option><option>COMMUNITY</option></select></div></div><div class="fitment-evidence-note">Tick VERIFY only when you have evidence for that exact vehicle variant. Catalogue links remain usable but display as unverified until reviewed.</div><div id="fitment-picker" class="fitment-picker">${options || '<div class="empty-state"><div><b>No vehicle variants</b><span>Add vehicles first.</span></div></div>'}</div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Save compatibility</button></div></form>`, 'modal-lg');
+    const existing = Object.fromEntries((product.fitments||[]).map(f => [f.vehicleVariantId,{compatibility:f.compatibility||'FITS',verified:Boolean(f.verified),source:f.source||'MANUAL'}]));
+    const options = variants.map(v => {
+      const fit=existing[v.id]; const stateValue=fit?.compatibility||'NONE';
+      return `<div class="fitment-option"><span><strong>${esc(v.model.make.name)} ${esc(v.model.name)} ${v.trim?`· ${esc(v.trim)}`:''}</strong><small>${esc(v.yearStart)}–${esc(v.yearEnd)} · ${esc(v.chassisCode||'chassis n/a')} · ${esc(v.engineName)}</small></span><select name="compatibility:${esc(v.id)}" class="fitment-state"><option value="NONE" ${stateValue==='NONE'?'selected':''}>NO RECORD</option><option value="FITS" ${stateValue==='FITS'?'selected':''}>FITS</option><option value="DOES_NOT_FIT" ${stateValue==='DOES_NOT_FIT'?'selected':''}>DOES NOT FIT</option></select><label class="verify-toggle" title="Verified evidence"><input type="checkbox" name="verifiedVariant" value="${esc(v.id)}" ${fit?.verified?'checked':''}><span>${fit?.verified?'VERIFIED':'VERIFY'}</span></label><code>${esc(v.engineCode)}</code></div>`;
+    }).join('');
+    openModal(`<form id="fitment-form" data-product-id="${esc(productId)}" data-existing="${esc(JSON.stringify(existing))}"><div class="modal-header"><div><h2>Manage fitment evidence</h2><p>${esc(product.name)} · ${esc(product.sku)}</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="toolbar" style="margin-bottom:12px"><div class="toolbar-left" style="width:100%"><input id="fitment-filter" type="search" placeholder="Filter make, model or engine code…" style="width:100%"></div><div class="toolbar-right"><select name="fitmentSource" title="Evidence source"><option>MANUAL</option><option>OEM</option><option>SUPPLIER</option><option>IMPORTED</option><option>COMMUNITY</option></select></div></div><div class="fitment-evidence-note"><strong>FITS</strong> is positive compatibility evidence. <strong>DOES NOT FIT</strong> is explicit negative evidence. <strong>NO RECORD</strong> means UNKNOWN — never automatically incompatible. Use VERIFY only when the exact record has been reviewed.</div><div id="fitment-picker" class="fitment-picker">${options||'<div class="empty-state"><div><b>No vehicle variants</b><span>Add vehicles first.</span></div></div>'}</div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Save fitment evidence</button></div></form>`,'modal-lg');
   }
 
   async function submitFitmentForm(form) {
-    const productId = form.dataset.productId;
-    const fd = new FormData(form);
-    const existing = new Set(safeJson(form.dataset.existing) || []);
-    const existingVerified = new Set(safeJson(form.dataset.existingVerified) || []);
-    const selected = new Set(fd.getAll('variant').map(String));
-    const verified = new Set(fd.getAll('verifiedVariant').map(String).filter(id => selected.has(id)));
-    const source = String(fd.get('fitmentSource') || 'MANUAL');
-    const toAddVerified = [...selected].filter(id => !existing.has(id) && verified.has(id));
-    const toAddCatalog = [...selected].filter(id => !existing.has(id) && !verified.has(id));
-    const toRemove = [...existing].filter(id => !selected.has(id));
-    if (toAddVerified.length) await api(`/api/admin/products/${productId}/fitments`, { method: 'POST', body: JSON.stringify({ vehicleVariantIds: toAddVerified, verified: true, source }) });
-    if (toAddCatalog.length) await api(`/api/admin/products/${productId}/fitments`, { method: 'POST', body: JSON.stringify({ vehicleVariantIds: toAddCatalog, verified: false, source }) });
-    const verificationChanges = [...selected].filter(id => existing.has(id) && existingVerified.has(id) !== verified.has(id));
-    await Promise.all(verificationChanges.map(id => api(`/api/admin/products/${productId}/fitments/${id}`, { method:'PATCH', body:JSON.stringify({ verified: verified.has(id), source }) })));
-    await Promise.all(toRemove.map(id => api(`/api/admin/products/${productId}/fitments/${id}`, { method: 'DELETE' })));
-    closeModal(); toast('Fitment updated', `${selected.size} compatible · ${verified.size} verified.`); await renderProducts();
+    const productId=form.dataset.productId, fd=new FormData(form), existing=safeJson(form.dataset.existing)||{}, source=String(fd.get('fitmentSource')||'MANUAL');
+    const verified=new Set(fd.getAll('verifiedVariant').map(String));
+    const rows=$$('.fitment-state',form).map(select=>({id:select.name.slice('compatibility:'.length),compatibility:select.value,verified:verified.has(select.name.slice('compatibility:'.length))}));
+    for(const row of rows){
+      const was=existing[row.id];
+      if(row.compatibility==='NONE'){
+        if(was) await api(`/api/admin/products/${productId}/fitments/${row.id}`,{method:'DELETE'});
+        continue;
+      }
+      if(!was){await api(`/api/admin/products/${productId}/fitments`,{method:'POST',body:JSON.stringify({vehicleVariantIds:[row.id],compatibility:row.compatibility,verified:row.verified,source})});continue;}
+      if(was.compatibility!==row.compatibility||Boolean(was.verified)!==row.verified||was.source!==source){await api(`/api/admin/products/${productId}/fitments/${row.id}`,{method:'PATCH',body:JSON.stringify({compatibility:row.compatibility,verified:row.verified,source})});}
+    }
+    const counts=rows.reduce((acc,row)=>{acc[row.compatibility]=(acc[row.compatibility]||0)+1;return acc;},{});
+    closeModal();toast('Fitment evidence updated',`${counts.FITS||0} fit · ${counts.DOES_NOT_FIT||0} do not fit · ${counts.NONE||0} unknown/no record`);await renderProducts();
   }
 
   async function openVehicleModelModal() {
@@ -903,7 +993,18 @@
     if (!actionEl) return;
     const action = actionEl.dataset.action;
     try {
-      if (action === 'add-product') await openProductModal();
+      if (action === 'view-customer-360') await openCustomer360(actionEl.dataset.id);
+      else if (action === 'add-customer-note') { const body=prompt('Internal staff note:'); if(body?.trim()){await api(`/api/admin/customer-intelligence/customers/${actionEl.dataset.customerId}/notes`,{method:'POST',body:JSON.stringify({body})});toast('Customer note added');await openCustomer360(actionEl.dataset.customerId);} }
+      else if (action === 'delete-customer-note') { if(confirm('Delete this note?')){await api(`/api/admin/customer-intelligence/customers/${actionEl.dataset.customerId}/notes/${actionEl.dataset.noteId}`,{method:'DELETE'});await openCustomer360(actionEl.dataset.customerId);} }
+      else if (action === 'add-customer-tag') { const tag=prompt('Customer tag (VIP, WHOLESALE, FOLLOW_UP):'); if(tag?.trim()){await api(`/api/admin/customer-intelligence/customers/${actionEl.dataset.customerId}/tags`,{method:'POST',body:JSON.stringify({tag})});await openCustomer360(actionEl.dataset.customerId);} }
+      else if (action === 'remove-customer-tag') { await api(`/api/admin/customer-intelligence/customers/${actionEl.dataset.customerId}/tags/${actionEl.dataset.tag}`,{method:'DELETE'});await openCustomer360(actionEl.dataset.customerId); }
+      else if (action === 'toggle-customer-status') { const isActive=actionEl.dataset.active!=='true'; if(confirm(`${isActive?'Reactivate':'Deactivate'} this customer account?`)){await api(`/api/admin/customer-intelligence/customers/${actionEl.dataset.id}/status`,{method:'PATCH',body:JSON.stringify({isActive})});await openCustomer360(actionEl.dataset.id);} }
+      else if (action === 'readiness-update') { const status=(prompt('Status: PASS, FAIL, NEEDS_TEST, NEEDS_CONFIGURATION, NOT_APPLICABLE',actionEl.dataset.status)||'').trim().toUpperCase(); if(status){const note=prompt('Evidence / note (never paste secrets):')||undefined;await api(`/api/admin/readiness/${encodeURIComponent(actionEl.dataset.key)}`,{method:'PUT',body:JSON.stringify({status,note})});await renderReadiness();} }
+      else if (action === 'commerce-add-region') { const country=(prompt('Country code (ZA, US, GB):')||'').trim().toUpperCase();const currency=(prompt('Settlement currency (usually USD):','USD')||'USD').trim().toUpperCase();const locale=(prompt('Locale:','en-ZA')||'en-ZA').trim();const payments=(prompt('Payment providers, comma-separated:','STRIPE,PAYPAL')||'STRIPE').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);if(country){await api('/api/admin/commerce/regions',{method:'POST',body:JSON.stringify({country,currency,locale,shippingAllowed:true,taxRequired:true,dutiesRequired:false,paymentMethods:payments})});await renderCommerce();} }
+      else if (action === 'commerce-add-fx') { const quote=(prompt('Display currency (example ZAR):')||'').trim().toUpperCase();const rate=Number(prompt(`1 USD = how many ${quote}?`,''));if(quote&&rate>0){await api('/api/admin/commerce/fx-rates',{method:'POST',body:JSON.stringify({baseCurrency:'USD',quoteCurrency:quote,rate,source:'MANUAL'})});await renderCommerce();} }
+      else if (action === 'commerce-add-tax') { const country=(prompt('Country code:','ZA')||'').trim().toUpperCase();const region=(prompt('State/region code (blank for country-wide):','')||'').trim().toUpperCase()||undefined;const label=prompt('Tax label:','VAT')||'VAT';const percent=Number(prompt('Tax rate percent:','15'));const inclusive=confirm('Are storefront prices tax-inclusive for this jurisdiction?');if(country&&percent>=0){await api('/api/admin/commerce/tax-rules',{method:'POST',body:JSON.stringify({country,region,label,taxType:label.toUpperCase().includes('VAT')?'VAT':'SALES_TAX',rateBps:Math.round(percent*100),taxInclusive:inclusive,priority:region?200:100})});await renderCommerce();} }
+      else if (action === 'commerce-add-zone') { const name=prompt('Shipping zone name:','South Africa')||'';const countries=(prompt('Country codes, comma-separated:','ZA')||'').split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);const rate=Math.round(Number(prompt('Flat shipping rate in settlement currency:','18'))*100);const freeRaw=Number(prompt('Free shipping threshold (0 = none):','250'));const free=freeRaw>0?Math.round(freeRaw*100):null;if(name&&countries.length){await api('/api/admin/commerce/shipping-zones',{method:'POST',body:JSON.stringify({name,countries,currency:'USD',rateCents:Math.max(0,rate),freeShippingThresholdCents:free,priority:100,active:true})});await renderCommerce();} }
+      else if (action === 'add-product') await openProductModal();
       else if (action === 'edit-product') await openProductModal(actionEl.dataset.id);
       else if (action === 'view-order') await openOrderModal(actionEl.dataset.id);
       else if (action === 'add-supplier') await openSupplierModal();
@@ -1030,7 +1131,7 @@
     if (event.target.id === 'product-search') debounce(() => renderProducts({ q: event.target.value, status: $('#product-status')?.value || '' }));
     else if (event.target.id === 'order-search') debounce(() => renderOrders({ q: event.target.value, status: $('#order-status')?.value || '' }));
     else if (event.target.id === 'vehicle-search') debounce(() => renderVehicles({ q: event.target.value }));
-    else if (event.target.id === 'customer-search') debounce(() => renderCustomers({ q: event.target.value }));
+    else if (event.target.id === 'customer-search') debounce(() => renderCustomerIntelligence({ q:event.target.value,status:$('#customer-status')?.value||'ALL',sort:$('#customer-sort')?.value||'newest' }));
     else if (event.target.id === 'fitment-filter') { const q = event.target.value.toLowerCase(); $$('.fitment-option', $('#fitment-picker')).forEach(row => { row.hidden = !row.textContent.toLowerCase().includes(q); }); }
   });
 
@@ -1046,6 +1147,7 @@
       } catch (error) { toast('Could not update request', error.message, 'error'); }
     } else if (event.target.id === 'product-status') renderProducts({ q: $('#product-search')?.value || '', status: event.target.value });
     else if (event.target.id === 'order-status') renderOrders({ q: $('#order-search')?.value || '', status: event.target.value });
+    else if (event.target.id === 'customer-status' || event.target.id === 'customer-sort') renderCustomerIntelligence({ q:$('#customer-search')?.value||'',status:$('#customer-status')?.value||'ALL',sort:$('#customer-sort')?.value||'newest' });
   });
 
   $('#refresh-button').addEventListener('click', () => navigate(state.view));

@@ -1,8 +1,8 @@
 {
   "name": "sandman-engine-parts-backend",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "private": true,
-  "description": "SANDMAN V2.4 security, identity, dealer verification, social profiles, follows, notifications, content safety and repaired 2FA/light mode.",
+  "description": "SANDMAN V2.5 verified fit, global commerce, customer intelligence, privacy, analytics and launch readiness.",
   "main": "dist/src/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -18,7 +18,11 @@
     "verify": "npm run verify:ui && npm run prisma:generate && npx prisma validate && npm run typecheck && npm test && npm run build",
     "vehicle:check": "node scripts/vehicle-catalog-check.mjs",
     "vehicle:sync:bmw": "node scripts/sync-vehicle-catalog.mjs --source=curated --only-make=BMW --from=1996 --to=2027",
-    "verify:ui": "node --check public/store/app.js && node --check public/admin/app.js && node scripts/static-v24-audit.mjs"
+    "verify:ui": "node --check public/store/app.js && node --check public/admin/app.js && node scripts/static-v24-audit.mjs && node scripts/static-v25-audit.mjs",
+    "v25:fx-refresh": "node scripts/fx-refresh.mjs",
+    "v25:db-growth-alert": "node scripts/db-growth-alert.mjs",
+    "v25:analytics-export": "node scripts/analytics-export.mjs",
+    "v25:analytics-retention": "node scripts/analytics-retention.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.0",
@@ -31,9 +35,9 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "nanoid": "^5.1.5",
-    "qrcode": "^1.5.4",
     "stripe": "^18.5.0",
-    "zod": "^4.1.5"
+    "zod": "^4.1.5",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
@@ -42,11 +46,11 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
     "@types/node": "^24.3.0",
-    "@types/qrcode": "^1.5.5",
     "prisma": "6.19.0",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "@types/qrcode": "^1.5.5"
   },
   "engines": {
     "node": ">=20"

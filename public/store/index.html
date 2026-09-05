@@ -40,6 +40,8 @@
       <a href="/feed">Following</a>
     </nav>
     <div class="header-actions">
+      <label class="currency-control" title="Display currency"><span>Currency</span><select id="currencySelector" aria-label="Display currency"><option>USD</option></select></label>
+      <label class="language-control" title="Language"><span>Language</span><select id="languageSelector" aria-label="Language"><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option><option value="de">DE</option></select></label>
       <button class="icon-btn" id="searchToggle" aria-label="Search" title="Search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
       </button>
@@ -88,7 +90,7 @@
     <div class="footer-links">
       <div><span>MARKET</span><a href="/shop">Shop all</a><a href="/shop?source=DROPSHIP">Supplier stock</a><a href="/marketplace">Seller listings</a></div>
       <div><span>SELL</span><a href="/sell">List a part</a><a href="/seller">Seller dashboard</a><a href="/account">Account</a></div>
-      <div><span>SANDMAN</span><a href="/buyer-protection">Buyer protection</a><a href="/shipping">Shipping</a><a href="/returns">Returns</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/about">About</a></div>
+      <div><span>SANDMAN</span><a href="/buyer-protection">Buyer protection</a><a href="/shipping">Shipping</a><a href="/returns">Returns</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="/cookies">Cookies</a><a href="/seller-terms">Seller terms</a><a href="/prohibited-products">Prohibited products</a><a href="/about">About</a></div>
     </div>
     <div class="footer-bottom"><span>© 2026 SANDMAN</span><span>DREAM WHILE AWAKE</span></div>
   </footer>
@@ -130,6 +132,11 @@
   <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
     <a href="/">Home</a><a href="/shop">Shop</a><a href="/vehicles">Vehicle</a><a href="/garage">Garage</a><button id="mobileAccountButton" type="button">Account</button>
   </nav>
+
+  <section class="cookie-consent" id="cookieConsent" aria-label="Privacy choices">
+    <div><span class="eyebrow">PRIVACY / YOUR CHOICE</span><h2>Choose how SANDMAN uses optional data.</h2><p>Necessary storage keeps security, accounts and checkout working. Analytics, preferences and marketing are optional.</p><details><summary>Customize</summary><label><input id="cookieAnalytics" type="checkbox"> Analytics</label><label><input id="cookiePreferences" type="checkbox"> Preferences</label><label><input id="cookieMarketing" type="checkbox"> Marketing</label></details></div>
+    <div class="cookie-actions"><button class="ghost-btn" id="cookieNecessary" type="button">Necessary only</button><button class="secondary-btn" id="cookieSave" type="button">Save choices</button><button class="primary-btn" id="cookieAcceptAll" type="button">Accept all</button></div>
+  </section>
 
   <script src="/store/app.js" defer></script>
 </body>

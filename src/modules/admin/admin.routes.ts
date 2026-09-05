@@ -223,6 +223,15 @@ const productSchema = z.object({
   priceCents: z.number().int().nonnegative(),
   compareAtCents: z.number().int().nonnegative().optional(),
   currency: z.string().length(3).default('USD'),
+  taxable: z.boolean().default(true),
+  weightGrams: z.number().int().positive().optional(),
+  lengthMm: z.number().int().positive().optional(),
+  widthMm: z.number().int().positive().optional(),
+  heightMm: z.number().int().positive().optional(),
+  hsCode: z.string().trim().max(32).optional(),
+  countryOfOrigin: z.string().trim().length(2).transform(v => v.toUpperCase()).optional(),
+  customsDescription: z.string().trim().max(500).optional(),
+  restrictedCountries: z.array(z.string().trim().length(2).transform(v => v.toUpperCase())).max(100).optional(),
   requiresFitment: z.boolean().default(true),
   isUniversal: z.boolean().default(false),
   warrantyText: z.string().max(1000).optional(),
@@ -452,10 +461,19 @@ adminRouter.post('/products/:id/fitments', asyncHandler(async (req, res) => {
     vehicleVariantIds: z.array(z.string().min(1)).min(1).max(500),
     notes: z.string().max(500).optional(),
     verified: z.boolean().default(false),
+    compatibility: z.enum(['FITS', 'DOES_NOT_FIT']).default('FITS'),
     source: z.enum(['MANUAL', 'SUPPLIER', 'OEM', 'COMMUNITY', 'IMPORTED']).default('MANUAL'),
   }).parse(req.body);
   await prisma.productFitment.createMany({
-    data: data.vehicleVariantIds.map(vehicleVariantId => ({ productId: routeParam(req.params.id, 'id'), vehicleVariantId, notes: data.notes, verified: data.verified, source: data.source, verifiedAt: data.verified ? new Date() : null })),
+    data: data.vehicleVariantIds.map(vehicleVariantId => ({
+      productId: routeParam(req.params.id, 'id'),
+      vehicleVariantId,
+      notes: data.notes,
+      verified: data.verified,
+      compatibility: data.compatibility,
+      source: data.source,
+      verifiedAt: data.verified ? new Date() : null,
+    })),
     skipDuplicates: true,
   });
   res.status(201).json({ success: true, count: data.vehicleVariantIds.length });
@@ -464,6 +482,7 @@ adminRouter.post('/products/:id/fitments', asyncHandler(async (req, res) => {
 adminRouter.patch('/products/:id/fitments/:vehicleVariantId', asyncHandler(async (req, res) => {
   const body = z.object({
     verified: z.boolean().optional(),
+    compatibility: z.enum(['FITS', 'DOES_NOT_FIT']).optional(),
     source: z.enum(['MANUAL', 'SUPPLIER', 'OEM', 'COMMUNITY', 'IMPORTED']).optional(),
     notes: z.string().max(500).nullable().optional(),
   }).parse(req.body);

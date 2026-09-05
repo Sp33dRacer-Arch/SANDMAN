@@ -31,6 +31,11 @@ import { v2Router } from './modules/v2/v2.routes';
 import { uploadsRouter } from './modules/uploads/uploads.routes';
 import { socialRouter } from './modules/social/social.routes';
 import { trustRouter, adminTrustRouter } from './modules/trust/trust.routes';
+import { customerIntelligenceRouter } from './modules/admin/customer-intelligence.routes';
+import { readinessRouter } from './modules/admin/readiness.routes';
+import { commerceRouter, adminCommerceRouter } from './modules/commerce/commerce.routes';
+import { privacyRouter } from './modules/privacy/privacy.routes';
+import { analyticsRouter, adminAnalyticsRouter } from './modules/analytics/analytics.routes';
 import { prisma } from './lib/prisma';
 import { asyncHandler } from './lib/async-handler';
 
@@ -86,7 +91,7 @@ app.use('/assets', express.static(path.join(storeUiDir, 'assets')));
 app.get('/api', (_req, res) => res.json({
   name: 'SANDMAN',
   description: 'Automotive parts marketplace, builds, fitment, dropshipping and seller platform',
-  version: '2.4.1',
+  version: '2.5.0',
   health: '/api/health',
   admin: '/admin',
   storefront: '/',
@@ -144,7 +149,7 @@ app.get('/sitemap.xml', asyncHandler(async (_req, res) => {
   // storefront routes below instead of accidentally producing an invalid file.
   const products = await prisma.product.findMany({ where: { status: 'ACTIVE' }, select: { slug: true, updatedAt: true }, orderBy: { updatedAt: 'desc' }, take: 49_980 });
   const base = env.APP_URL.replace(/\/$/, '');
-  const staticPaths = ['/', '/shop', '/vehicles', '/build-advisor', '/marketplace', '/buyer-protection', '/shipping', '/returns', '/terms', '/privacy', '/about'];
+  const staticPaths = ['/', '/shop', '/vehicles', '/build-advisor', '/marketplace', '/verified-fit', '/buyer-protection', '/shipping', '/returns', '/terms', '/privacy', '/cookies', '/seller-terms', '/prohibited-products', '/about'];
   const urls = [
     ...staticPaths.map(pathname => `<url><loc>${htmlEsc(base + pathname)}</loc></url>`),
     ...products.map(product => `<url><loc>${htmlEsc(`${base}/products/${encodeURIComponent(product.slug)}`)}</loc><lastmod>${product.updatedAt.toISOString()}</lastmod></url>`),
@@ -176,13 +181,20 @@ app.use('/api/security', securityRouter);
 app.use('/api/social', socialRouter);
 app.use('/api/trust', trustRouter);
 app.use('/api/admin/trust', adminTrustRouter);
+app.use('/api/admin/customer-intelligence', customerIntelligenceRouter);
+app.use('/api/admin/readiness', readinessRouter);
+app.use('/api/commerce', commerceRouter);
+app.use('/api/admin/commerce', adminCommerceRouter);
+app.use('/api/privacy', privacyRouter);
+app.use('/api/analytics', analyticsRouter);
+app.use('/api/admin/analytics', adminAnalyticsRouter);
 app.use('/api/admin/ops', opsRouter);
 app.use('/api/supplier-feed', supplierFeedRouter);
 app.use('/api/v2', v2Router);
 
 // History-API storefront routes. Old #/ links remain supported by the browser router,
 // but public/canonical URLs use normal paths so products and landing pages are crawlable.
-const storefrontRoute = /^\/(?:shop|vehicles|vehicle-finder|build-advisor|advisor|requests|garage|builds(?:\/[^/]+)?|public-builds\/[^/]+|compare|wishlist|messages|sellers\/[^/]+|sell|seller|account|notifications|feed|profile\/[^/]+|checkout|orders\/[^/]+|returns-center|buyer-protection|shipping|returns|terms|privacy|about|verify-email|email-change|reset-password|marketplace)\/?$/;
+const storefrontRoute = /^\/(?:shop|vehicles|vehicle-finder|build-advisor|advisor|requests|garage|builds(?:\/[^/]+)?|public-builds\/[^/]+|compare|wishlist|messages|sellers\/[^/]+|sell|seller|account|notifications|feed|profile\/[^/]+|checkout|orders\/[^/]+|returns-center|verified-fit|buyer-protection|shipping|returns|terms|privacy|cookies|seller-terms|prohibited-products|about|verify-email|email-change|reset-password|marketplace)\/?$/;
 app.get(storefrontRoute, (_req, res) => sendStorefront(res));
 
 app.use(notFound);

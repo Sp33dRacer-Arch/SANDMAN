@@ -61,8 +61,8 @@ else pass('44px mobile touch targets present in store and admin');
 if (!storeCss.includes(':root[data-theme="light"]')) fail('storefront light-theme overrides missing');
 else pass('light-theme overrides present');
 
-if (pkg.version !== '2.4.1') fail(`package version is ${pkg.version}, expected 2.4.1`);
-if (!app.includes("version: '2.4.1'")) fail('API root version marker is stale');
+if (pkg.version !== '2.5.0') fail(`package version is ${pkg.version}, expected 2.5.0 for upgraded security baseline`);
+if (!app.includes("version: '2.5.0'")) fail('API root version marker is stale');
 else pass('runtime version markers are current');
 
 for (const forbidden of ['eval(', 'new Function(']) {
@@ -71,4 +71,4 @@ for (const forbidden of ['eval(', 'new Function(']) {
 if (!process.exitCode) pass('no obvious dynamic-code execution primitive in browser bundles');
 
 if (process.exitCode) process.exit(process.exitCode);
-console.log('SANDMAN V2.4.1 static UI/security audit passed.');
+console.log('SANDMAN V2.4.1 security baseline audit passed on V2.5.0.');
