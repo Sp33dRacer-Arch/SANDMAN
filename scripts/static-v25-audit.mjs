@@ -48,10 +48,10 @@ const required=[
  [customer,'maskedVin','masked VIN in Customer 360'],
  [env,'ERROR_MONITORING_WEBHOOK_URL','error monitoring configuration'],
  [env,'READ_REPLICA_DATABASE_URL','read replica configuration'],
- [app,"version: '2.5.0'",'API version 2.5.0'],
+ [app,"version: '2.5.2'",'API version 2.5.2'],
 ];
 for(const [src,needle,label] of required) src.includes(needle)?pass(label):fail(`${label} missing`);
-if(pkg.version==='2.5.0') pass('package version 2.5.0'); else fail(`package version ${pkg.version}`);
+if(pkg.version==='2.5.2') pass('package version 2.5.2'); else fail(`package version ${pkg.version}`);
 if(store.includes("p.fitmentStatus||'CATALOG_FIT'")) fail('missing fitment still defaults to Catalogue Fit'); else pass('missing fitment remains unknown');
 if(/DROP TABLE|TRUNCATE|DELETE FROM|DROP COLUMN/i.test(migration)) fail('destructive SQL found in V2.5 migration'); else pass('V2.5 migration has no obvious destructive SQL');
 for(const forbidden of ['eval(', 'new Function(']) { if(store.includes(forbidden)||admin.includes(forbidden)) fail(`browser dynamic-code primitive: ${forbidden}`); }

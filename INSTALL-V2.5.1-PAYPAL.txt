@@ -1,0 +1,79 @@
+SANDMAN V2.5.1 — PAYPAL-FIRST CHECKOUT
+======================================
+
+Purpose
+-------
+Makes PayPal the primary SANDMAN checkout for direct/dropship orders and hardens the server integration.
+The existing Stripe code is retained only as an optional fallback and for the current Stripe Connect marketplace seller-payout path.
+
+PayPal improvements
+-------------------
+- PayPal is the default checkout provider.
+- PayPal appears first in checkout.
+- OAuth access tokens are cached safely.
+- PayPal API calls have timeouts and clearer provider errors.
+- Create, capture and refund calls use PayPal-Request-Id idempotency keys.
+- SANDMAN sends its checkout shipping address to PayPal for physical goods.
+- Capture ID is persisted immediately and used for refunds.
+- Signed PayPal webhooks are verified cryptographically from the raw request body.
+- PAYMENT.CAPTURE.COMPLETED can recover/finalize a payment if the browser response path fails.
+- Denied/reversed PayPal payments are recorded as failed; pending captures remain unfulfilled.
+- Browser checkout validates PayPal order IDs and handles cancel/error/eligibility states.
+
+Required Railway variables
+--------------------------
+PAYPAL_CLIENT_ID=<your PayPal REST app client ID>
+PAYPAL_CLIENT_SECRET=<your PayPal REST app secret>
+PAYPAL_WEBHOOK_ID=<the webhook ID from the SAME PayPal REST app>
+PAYPAL_MODE=sandbox
+PAYPAL_BRAND_NAME=SANDMAN
+CURRENCY=USD
+
+Do not paste secrets into chat, source files or GitHub.
+Keep PAYPAL_MODE=sandbox until sandbox end-to-end checkout passes.
+
+Webhook
+-------
+URL:
+https://YOUR-SANDMAN-DOMAIN/api/webhooks/paypal
+
+Subscribe the same PayPal REST app to at least:
+CHECKOUT.PAYMENT-APPROVAL.REVERSED
+CHECKOUT.ORDER.DECLINED
+PAYMENT.CAPTURE.PENDING
+PAYMENT.CAPTURE.COMPLETED
+PAYMENT.CAPTURE.DENIED
+PAYMENT.CAPTURE.REFUNDED
+PAYMENT.CAPTURE.REVERSED
+
+Local install
+-------------
+Overlay this patch/project onto your existing SANDMAN-backend without copying .git, node_modules or .env.
+Then run:
+
+npm install
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.5.1-PAYPAL.ps1"
+
+Railway
+-------
+Build:      npm run prisma:generate && npm run build
+Pre-deploy: npm run prisma:deploy
+Start:      node dist/src/server.js
+Health:     /api/health
+
+Live certification still required
+---------------------------------
+Code/static/local verification cannot prove PayPal credentials or PayPal's external network work.
+Before PAYPAL_MODE=live, complete a real PayPal sandbox test:
+1. Buyer approves an order.
+2. SANDMAN captures it server-side.
+3. Order becomes PAID exactly once.
+4. PayPal webhook is received and signature accepted.
+5. Duplicate webhook/capture does not duplicate payment/fulfillment.
+6. Cancel/decline paths do not mark the order paid.
+7. Refund succeeds to the original PayPal capture.
+
+Marketplace note
+----------------
+Ordinary PayPal Checkout is not a drop-in replacement for marketplace seller payouts.
+The existing seller-marketplace path still uses Stripe Connect unless/until SANDMAN is approved for a PayPal multiparty/platform product.

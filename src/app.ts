@@ -46,11 +46,11 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", 'https://js.stripe.com', 'https://www.paypal.com'],
+      scriptSrc: ["'self'", 'https://www.paypal.com', 'https://pay.google.com', 'https://applepay.cdn-apple.com'],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", 'data:', 'https:'],
-      connectSrc: ["'self'", 'https://api.stripe.com', 'https://*.stripe.com', 'https://www.paypal.com', 'https://*.paypal.com', 'https://api.cloudinary.com'],
-      frameSrc: ["'self'", 'https://js.stripe.com', 'https://hooks.stripe.com', 'https://www.paypal.com', 'https://*.paypal.com'],
+      connectSrc: ["'self'", 'https://www.paypal.com', 'https://*.paypal.com', 'https://pay.google.com', 'https://*.google.com', 'https://apple-pay-gateway.apple.com', 'https://api.cloudinary.com'],
+      frameSrc: ["'self'", 'https://www.paypal.com', 'https://*.paypal.com', 'https://pay.google.com'],
       fontSrc: ["'self'", 'data:'],
     },
   },
@@ -88,10 +88,18 @@ app.get('/admin', (_req, res) => res.sendFile(path.join(adminUiDir, 'index.html'
 app.use('/store', express.static(storeUiDir, { index: 'index.html' }));
 app.use('/assets', express.static(path.join(storeUiDir, 'assets')));
 
+// PayPal/Apple require the exact merchant-domain association file to be served
+// from this well-known path before Apple Pay can be enabled for a live domain.
+const applePayAssociationFile = path.join(process.cwd(), 'public', 'apple-developer-merchantid-domain-association');
+app.get('/.well-known/apple-developer-merchantid-domain-association', (_req, res) => {
+  if (!fs.existsSync(applePayAssociationFile)) return res.status(404).end();
+  res.type('application/octet-stream').sendFile(applePayAssociationFile);
+});
+
 app.get('/api', (_req, res) => res.json({
   name: 'SANDMAN',
   description: 'Automotive parts marketplace, builds, fitment, dropshipping and seller platform',
-  version: '2.5.0',
+  version: '2.5.2',
   health: '/api/health',
   admin: '/admin',
   storefront: '/',

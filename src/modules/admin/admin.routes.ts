@@ -33,14 +33,15 @@ adminRouter.get('/settings', asyncHandler(async (_req, res) => {
     sessionDays: env.SESSION_DAYS,
     activePersistentSessions: sessions,
     payments: {
-      stripe: Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
       paypal: Boolean(env.PAYPAL_CLIENT_ID && env.PAYPAL_CLIENT_SECRET),
       bankTransfer: Boolean(env.BANK_TRANSFER_INSTRUCTIONS),
     },
     imageUploads: { cloudinary: Boolean(env.CLOUDINARY_CLOUD_NAME && env.CLOUDINARY_API_KEY && env.CLOUDINARY_API_SECRET) },
     marketplace: {
       commissionPercent: env.MARKETPLACE_COMMISSION_PERCENT,
-      payoutProvider: 'Stripe Connect',
+      payoutProvider: null,
+      checkoutEnabled: false,
+      payoutNote: 'Marketplace checkout is paused until a PayPal-compatible multiparty payout flow is approved and implemented.',
       // Backwards-compatible fields now mean actually-paid money only.
       payoutCount: paidPayouts._count,
       sellerPayoutCents: paidPayouts._sum.amountCents ?? 0,

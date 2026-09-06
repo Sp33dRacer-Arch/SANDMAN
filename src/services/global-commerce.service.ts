@@ -59,14 +59,13 @@ export type CommerceQuote = {
   importScheme: string | null;
   shippingQuoteMeta: Record<string, unknown>;
   settlementCurrency: string;
-  allowedPaymentProviders: Array<'stripe' | 'paypal' | 'bank_transfer'>;
+  allowedPaymentProviders: Array<'paypal' | 'bank_transfer'>;
   lines: PricedCommerceLine[];
 };
 
-function normalizedPaymentMethods(value: unknown): Array<'stripe' | 'paypal' | 'bank_transfer'> {
+function normalizedPaymentMethods(value: unknown): Array<'paypal' | 'bank_transfer'> {
   const methods = stringArray(value);
-  const result: Array<'stripe' | 'paypal' | 'bank_transfer'> = [];
-  if (methods.includes('STRIPE')) result.push('stripe');
+  const result: Array<'paypal' | 'bank_transfer'> = [];
   if (methods.includes('PAYPAL')) result.push('paypal');
   if (methods.includes('BANK_TRANSFER') || methods.includes('BANK') || methods.includes('EFT')) result.push('bank_transfer');
   return result;
@@ -344,8 +343,8 @@ export async function quoteGlobalCommerce(input: {
 }
 
 export function assertPaymentProviderAllowed(
-  provider: 'stripe' | 'paypal' | 'bank_transfer',
-  allowed: Array<'stripe' | 'paypal' | 'bank_transfer'>,
+  provider: 'paypal' | 'bank_transfer',
+  allowed: Array<'paypal' | 'bank_transfer'>,
   country: string,
 ) {
   if (!allowed.includes(provider)) {

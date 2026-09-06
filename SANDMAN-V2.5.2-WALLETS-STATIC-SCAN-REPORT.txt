@@ -1,0 +1,27 @@
+SANDMAN V2.5.2 PayPal + Wallets static/source verification
+
+PASS: public/store/app.js syntax
+PASS: public/admin/app.js syntax
+PASS: V2.4 security baseline audit on V2.5.2
+PASS: V2.5 static audit on V2.5.2
+PASS: PayPal hardening static audit
+PASS: V2.5.2 wallet static audit
+PASS: 87 TypeScript files parsed with 0 syntax errors
+PASS: 0 missing relative imports
+PASS: Stripe removed from customer-facing website checkout and public/admin website references
+PASS: Google Pay integration markers present through PayPal
+PASS: Apple Pay integration markers present through PayPal
+PASS: Apple Pay domain-association endpoint present
+PASS: PayPal order creation is wallet-neutral
+PASS: Marketplace checkout is paused rather than falling back to unsafe/unsupported Stripe behavior
+
+NOT YET CERTIFIED IN THIS SANDBOX:
+- Prisma generate/validate with installed dependencies
+- dependency-backed TypeScript typecheck
+- Vitest suite
+- production build
+- live PayPal Sandbox E2E
+- live Google Pay wallet E2E
+- live Apple Pay wallet/domain validation E2E
+
+Run VERIFY-V2.5.2-WALLETS.ps1 locally inside SANDMAN-backend after applying this patch.

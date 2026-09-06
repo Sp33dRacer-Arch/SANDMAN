@@ -1,0 +1,46 @@
+import fs from 'fs';
+import path from 'path';
+
+const root = process.cwd();
+const read = p => fs.readFileSync(path.join(root,p),'utf8');
+const paypal = read('src/services/paypal.service.ts');
+const orders = read('src/modules/orders/orders.routes.ts');
+const webhooks = read('src/modules/webhooks/webhooks.routes.ts');
+const payments = read('src/modules/payments/payments.routes.ts');
+const env = read('src/config/env.ts');
+const schema = read('prisma/schema.prisma');
+const migration = read('prisma/migrations/20260905153000_v251_paypal_hardening/migration.sql');
+const store = read('public/store/app.js');
+const admin = read('src/modules/admin/readiness.routes.ts');
+const publicAdmin = read('public/admin/app.js');
+const pkg = JSON.parse(read('package.json'));
+const app = read('src/app.ts');
+let failed = false;
+const pass = m => console.log(`PASS: ${m}`);
+const fail = m => { failed = true; console.error(`FAIL: ${m}`); };
+const check = (condition, message) => condition ? pass(message) : fail(message);
+
+check(pkg.version === '2.5.2' && app.includes("version: '2.5.2'"), 'V2.5.2 runtime/package markers');
+check(env.includes('PAYPAL_WEBHOOK_ID') && env.includes('PAYPAL_BRAND_NAME'), 'PayPal webhook + brand environment configuration');
+check(payments.includes("primaryProvider: 'paypal'"), 'PayPal is the primary payment provider');
+check(orders.includes("paymentProvider: z.enum(['paypal', 'bank_transfer']).default('paypal')"), 'checkout defaults to PayPal without a Stripe customer option');
+check(paypal.includes("'PayPal-Request-Id': requestId('sandman-create'"), 'PayPal create-order idempotency');
+check(paypal.includes("'PayPal-Request-Id': requestId('sandman-capture'"), 'PayPal capture idempotency');
+check(paypal.includes("'PayPal-Request-Id': requestId('sandman-refund'"), 'PayPal refund idempotency');
+check(paypal.includes("shipping_preference: 'SET_PROVIDED_ADDRESS'") && paypal.includes('shipping: {') && paypal.includes('Leave payment_source unset'), 'merchant-provided shipping address is sent to a wallet-neutral PayPal order');
+check(paypal.includes('TOKEN_SAFETY_WINDOW_MS') && paypal.includes('tokenCache'), 'PayPal OAuth token caching');
+check(paypal.includes('API_TIMEOUT_MS') && paypal.includes('AbortController'), 'PayPal API timeout protection');
+check(paypal.includes('verifyPayPalWebhookSignature') && paypal.includes('crc32(rawBody)') && paypal.includes("endsWith('.paypal.com')"), 'cryptographic PayPal webhook signature verification');
+check(webhooks.includes("post('/paypal', express.raw({ type: 'application/json' })") && webhooks.includes("provider: 'paypal'"), 'raw-body PayPal webhook endpoint + deduplication');
+check(webhooks.includes("event.event_type === 'PAYMENT.CAPTURE.COMPLETED'") && webhooks.includes('PayPal webhook payment does not match the SANDMAN order'), 'PayPal capture webhook amount/identity validation');
+check(schema.includes('paypalCaptureId        String?           @unique') && migration.includes('paypalCaptureId'), 'PayPal capture ID persistence + migration');
+check(orders.includes('data: { paypalCaptureId: capturedPayment.id }'), 'capture ID stored immediately after capture');
+check(store.includes("title:'PayPal + digital wallets'") && !store.includes("renderStripePayment") && !store.includes("js.stripe.com"), 'storefront is PayPal/wallet-first with no Stripe checkout UI');
+check(store.includes("data.orderID!==result.payment.paypalOrderId") && store.includes('onCancel:') && store.includes('buttons.isEligible'), 'PayPal browser approval/cancel/eligibility handling');
+check(admin.includes('env.PAYPAL_WEBHOOK_ID') && admin.includes("label:'PayPal primary checkout'"), 'launch readiness requires PayPal webhook configuration');
+check(publicAdmin.includes('PayPal + wallets') && !publicAdmin.includes('Stripe payout settings'), 'admin UI reflects PayPal + wallets strategy without Stripe links');
+check(!store.includes('PAYPAL_CLIENT_SECRET') && !publicAdmin.includes('PAYPAL_CLIENT_SECRET'), 'PayPal client secret is never exposed in browser bundles');
+check(!migration.match(/DROP\s+TABLE|TRUNCATE|DELETE\s+FROM|DROP\s+COLUMN/i), 'PayPal migration has no obvious destructive SQL');
+
+if (failed) process.exit(1);
+console.log('SANDMAN V2.5.2 PayPal hardening audit passed.');

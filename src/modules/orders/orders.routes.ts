@@ -18,7 +18,6 @@ import {
 import { allocateDiscountCents } from '../../lib/discount-allocation';
 import { createOrderNumber } from '../../lib/order-number';
 import { chooseSupplierForProduct } from '../../services/supplier-routing';
-import { getStripe } from '../../services/stripe.service';
 import { createPayPalOrder, capturePayPalOrder, paypalConfigured } from '../../services/paypal.service';
 import { finalizePaidOrder } from '../../services/payment-finalization.service';
 import { rollbackUninitializedCheckout } from '../../services/order-lifecycle.service';
@@ -85,8 +84,8 @@ async function loadCheckoutCart(userId: string) {
     if (item.product.sourceType === 'MARKETPLACE' && item.quantity > (item.product.stockQuantity ?? 0)) {
       throw new HttpError(409, `${item.product.name} no longer has enough seller stock`);
     }
-    if (item.product.sourceType === 'MARKETPLACE' && (!item.product.seller?.stripeConnectAccountId || !item.product.seller.stripeConnectPayoutsEnabled)) {
-      throw new HttpError(409, `${item.product.name} is temporarily unavailable while the seller completes payout verification`);
+    if (item.product.sourceType === 'MARKETPLACE') {
+      throw new HttpError(409, `${item.product.name} is temporarily unavailable for checkout while SANDMAN moves marketplace seller payouts to a PayPal-compatible flow`);
     }
     if (item.product.requiresFitment && !item.product.isUniversal) {
       if (!item.fitmentVehicleVariantId) throw new HttpError(409, `Vehicle fitment is missing for ${item.product.name}`);
@@ -205,6 +204,7 @@ function publicOrder(order: any) {
     internalNote: _internalNote,
     stripePaymentIntentId: _stripePaymentIntentId,
     paypalOrderId: _paypalOrderId,
+    paypalCaptureId: _paypalCaptureId,
     marketplaceStockReleasedAt: _marketplaceStockReleasedAt,
     refundInProgressAt: _refundInProgressAt,
     refundInProgressCaseId: _refundInProgressCaseId,
@@ -306,7 +306,7 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
     shippingAddress: addressSchema,
     billingAddress: addressSchema.optional(),
     customerNote: z.string().max(1000).optional(),
-    paymentProvider: z.enum(['stripe', 'paypal', 'bank_transfer']).default('stripe'),
+    paymentProvider: z.enum(['paypal', 'bank_transfer']).default('paypal'),
     promoCode: z.string().trim().max(50).optional(),
     displayCurrency: z.string().trim().length(3).optional(),
     acknowledgedUnknownFitmentProductIds: z.array(z.string().min(1)).max(100).default([]),
@@ -314,7 +314,6 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
   const user = await prisma.user.findUnique({ where: { id: req.auth!.userId } });
   if (!user) throw new HttpError(404, 'User not found');
 
-  if (body.paymentProvider === 'stripe' && (!getStripe() || !env.STRIPE_PUBLISHABLE_KEY)) throw new HttpError(503, 'Stripe is not fully configured');
   if (body.paymentProvider === 'paypal' && !paypalConfigured()) throw new HttpError(503, 'PayPal is not configured');
   if (body.paymentProvider === 'bank_transfer' && !env.BANK_TRANSFER_INSTRUCTIONS) throw new HttpError(503, 'Bank transfer is not configured');
 
@@ -346,11 +345,8 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
   const display = await commerceContext(body.shippingAddress.country, body.displayCurrency);
 
   const hasMarketplaceItems = cart.items.some(item => item.product.sourceType === 'MARKETPLACE');
-  if (hasMarketplaceItems && body.paymentProvider !== 'stripe') {
-    throw new HttpError(400, 'Marketplace carts require Stripe so seller payouts can be split securely through Stripe Connect');
-  }
-  if (hasMarketplaceItems && !quote.allowedPaymentProviders.includes('stripe')) {
-    throw new HttpError(409, 'Stripe must be enabled for this destination before marketplace items can be purchased');
+  if (hasMarketplaceItems) {
+    throw new HttpError(409, 'Marketplace checkout is temporarily paused while SANDMAN moves seller payouts to a PayPal-compatible multiparty flow');
   }
 
   const orderTotals = {
@@ -493,6 +489,7 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
         orderNumber: order.orderNumber,
         amountCents: order.totalCents,
         currency: order.currency,
+        shippingAddress: body.shippingAddress,
       });
       await prisma.$transaction([
         prisma.order.update({ where: { id: order.id }, data: { paypalOrderId: paypalOrder.id } }),
@@ -504,29 +501,6 @@ ordersRouter.post('/checkout', asyncHandler(async (req, res) => {
       });
     }
 
-    const stripe = getStripe();
-    if (!stripe || !env.STRIPE_PUBLISHABLE_KEY) throw new HttpError(503, 'Stripe is not fully configured');
-
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: order.totalCents,
-      currency: order.currency.toLowerCase(),
-      receipt_email: order.email,
-      metadata: { orderId: order.id, orderNumber: order.orderNumber },
-      automatic_payment_methods: { enabled: true },
-      transfer_group: `ORDER_${order.id}`,
-    }, {
-      idempotencyKey: `sandman-checkout-${order.id}`,
-    });
-
-    await prisma.$transaction([
-      prisma.order.update({ where: { id: order.id }, data: { stripePaymentIntentId: paymentIntent.id } }),
-      prisma.cartItem.deleteMany({ where: { cartId: cart.id } }),
-    ]);
-
-    return res.status(201).json({
-      order: publicOrder(order),
-      payment: { provider: 'stripe', clientSecret: paymentIntent.client_secret, publishableKey: env.STRIPE_PUBLISHABLE_KEY },
-    });
   } catch (error) {
     // Payment initialization never reached the customer, so restore the seller
     // stock and keep their cart intact for a retry.
@@ -547,19 +521,24 @@ ordersRouter.post('/:orderNumber/paypal/capture', asyncHandler(async (req, res) 
     throw new HttpError(409, 'This checkout was cancelled. Create a new order instead of capturing the old PayPal session.');
   }
 
-  const capture = await capturePayPalOrder(order.paypalOrderId);
+  const capture = await capturePayPalOrder(order.paypalOrderId, order.id);
   if (capture.status !== 'COMPLETED') throw new HttpError(409, `PayPal payment is ${capture.status || 'not complete'}`);
 
   const unit = capture.purchase_units?.[0];
-  const captureAmount = unit?.payments?.captures?.[0]?.amount;
+  const capturedPayment = unit?.payments?.captures?.[0];
+  const captureAmount = capturedPayment?.amount;
   const expected = (order.totalCents / 100).toFixed(2);
   if (!unit || unit.custom_id !== order.id || unit.invoice_id !== order.orderNumber) {
     throw new HttpError(409, 'PayPal order identity does not match the SANDMAN order');
   }
-  if (!captureAmount || String(captureAmount.value) !== expected || String(captureAmount.currency_code).toUpperCase() !== order.currency.toUpperCase()) {
+  if (!capturedPayment?.id || !captureAmount || String(captureAmount.value) !== expected || String(captureAmount.currency_code).toUpperCase() !== order.currency.toUpperCase()) {
     throw new HttpError(409, 'PayPal captured amount does not match the SANDMAN order');
   }
 
+  await prisma.order.update({
+    where: { id: order.id },
+    data: { paypalCaptureId: capturedPayment.id },
+  });
   await finalizePaidOrder({ orderId: order.id, provider: 'paypal', message: 'PayPal payment captured successfully' });
   const updated = await prisma.order.findUnique({ where: { id: order.id }, include: { items: true, fulfillments: true } });
   res.json({ success: true, order: updated ? publicOrder(updated) : null });

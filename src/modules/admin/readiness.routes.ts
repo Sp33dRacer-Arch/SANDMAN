@@ -62,7 +62,7 @@ readinessRouter.get('/', asyncHandler(async (_req, res) => {
   } catch {}
 
   const [
-    savedRows, suppliers, regions, taxRules, zones, fxRates,
+    savedRows, suppliers, regions, taxRules, zones, fxRates, activeMarketplaceProducts,
   ] = await Promise.all([
     prisma.operationalReadiness.findMany(),
     prisma.supplier.findMany({ where: { active: true }, select: { id: true, type: true, name: true } }),
@@ -70,6 +70,7 @@ readinessRouter.get('/', asyncHandler(async (_req, res) => {
     prisma.taxRule.findMany({ where: { active: true }, select: { country: true, region: true } }),
     prisma.shippingZone.findMany({ where: { active: true }, select: { id: true, name: true, countries: true } }),
     prisma.fxRate.findMany({ where: { baseCurrency: env.CURRENCY.toUpperCase() }, select: { quoteCurrency: true, fetchedAt: true } }),
+    prisma.product.count({ where: { status: 'ACTIVE', sourceType: 'MARKETPLACE' } }),
   ]);
   const saved = new Map(savedRows.map(row => [row.key, row]));
 
@@ -105,8 +106,10 @@ readinessRouter.get('/', asyncHandler(async (_req, res) => {
     { key:'DATABASE_HEALTH', category:'Core', label:'PostgreSQL connection', status:databaseOk?'PASS':'FAIL', detail:databaseOk?'Database query succeeded':'Database query failed', mode:'AUTOMATIC' },
     { key:'CUSTOM_DOMAIN', category:'Core', label:'Custom domain + HTTPS', status:customDomainLive?'PASS':customHost?'FAIL':'NEEDS_CONFIGURATION', detail:customDomainLive?`${env.APP_URL} responded over HTTPS`:customHost?'Custom domain is configured but its live health check failed':'APP_URL is not using an active custom HTTPS hostname', mode:'AUTOMATIC' },
 
-    { key:'STRIPE_E2E', category:'Commerce', label:'Stripe end-to-end', status:configured(env.STRIPE_SECRET_KEY,env.STRIPE_PUBLISHABLE_KEY,env.STRIPE_WEBHOOK_SECRET)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:'Test successful/declined payment, signed webhook idempotency and refund.', mode:'CERTIFICATION' },
-    { key:'PAYPAL_E2E', category:'Commerce', label:'PayPal end-to-end', status:configured(env.PAYPAL_CLIENT_ID,env.PAYPAL_CLIENT_SECRET)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:`Mode: ${env.PAYPAL_MODE}. Test create/capture/cancel/refund if PayPal will be offered.`, mode:'CERTIFICATION' },
+    { key:'PAYPAL_E2E', category:'Commerce', label:'PayPal primary checkout', status:configured(env.PAYPAL_CLIENT_ID,env.PAYPAL_CLIENT_SECRET,env.PAYPAL_WEBHOOK_ID)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:`Mode: ${env.PAYPAL_MODE}. Requires client ID, secret and webhook ID. Test create → buyer approve → capture → signed webhook → refund before launch.`, mode:'CERTIFICATION' },
+    { key:'GOOGLE_PAY_E2E', category:'Commerce', label:'Google Pay via PayPal', status:configured(env.PAYPAL_CLIENT_ID,env.PAYPAL_CLIENT_SECRET)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:'Google Pay is eligibility-gated by PayPal and Google. Enable it in the PayPal app, then test an eligible browser/device and a real sandbox wallet.', mode:'CERTIFICATION' },
+    { key:'APPLE_PAY_E2E', category:'Commerce', label:'Apple Pay via PayPal', status:configured(env.PAYPAL_CLIENT_ID,env.PAYPAL_CLIENT_SECRET)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:'Apple Pay requires PayPal approval plus merchant-domain association at /.well-known/apple-developer-merchantid-domain-association before the button can work live.', mode:'CERTIFICATION' },
+    { key:'MARKETPLACE_PAYOUTS', category:'Commerce', label:'Marketplace seller payouts', status:activeMarketplaceProducts>0?'NEEDS_CONFIGURATION':'NOT_APPLICABLE', detail:activeMarketplaceProducts>0?`${activeMarketplaceProducts} active marketplace product(s) exist. Checkout is intentionally paused until a PayPal-compatible multiparty payout solution is approved and implemented.`:'No active marketplace listings require a seller payout rail.', mode:activeMarketplaceProducts>0?'MANUAL':'AUTOMATIC' },
     { key:'SUPPLIER_FULFILLMENT_E2E', category:'Commerce', label:'Real supplier fulfillment', status:nonMockSuppliers.length?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:`${nonMockSuppliers.length} non-mock supplier(s). Test paid order → supplier → tracking → delivery/cancellation.`, mode:'CERTIFICATION' },
 
     { key:'CLOUDINARY_LIVE', category:'Identity & Media', label:'Cloudinary production upload', status:configured(env.CLOUDINARY_CLOUD_NAME,env.CLOUDINARY_API_KEY,env.CLOUDINARY_API_SECRET)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:'Test a signed upload using a verified production-like account.', mode:'CERTIFICATION' },

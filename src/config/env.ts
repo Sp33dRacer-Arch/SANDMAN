@@ -51,8 +51,10 @@ const schema = z.object({
   STRIPE_PUBLISHABLE_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
 
-  PAYPAL_CLIENT_ID: z.string().optional(),
-  PAYPAL_CLIENT_SECRET: z.string().optional(),
+  PAYPAL_CLIENT_ID: optionalNonEmptyString,
+  PAYPAL_CLIENT_SECRET: optionalNonEmptyString,
+  PAYPAL_WEBHOOK_ID: optionalNonEmptyString,
+  PAYPAL_BRAND_NAME: z.string().trim().min(1).max(127).default('SANDMAN'),
   PAYPAL_MODE: z.enum(['sandbox', 'live']).default('sandbox'),
 
   BANK_TRANSFER_INSTRUCTIONS: z.string().max(2000).optional(),

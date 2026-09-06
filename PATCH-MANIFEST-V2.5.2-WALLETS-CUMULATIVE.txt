@@ -1,0 +1,19 @@
+SANDMAN V2.5.2 PayPal + Wallets Cumulative Fix
+
+Built for direct upgrade from SANDMAN V2.5.
+Includes the complete V2.5.1 PayPal hardening layer plus V2.5.2 wallet/frontend changes.
+
+Critical cumulative files added beyond the original V2.5.2 patch:
+- prisma/schema.prisma
+- prisma/migrations/20260905153000_v251_paypal_hardening/migration.sql
+- src/config/env.ts
+- src/modules/webhooks/webhooks.routes.ts
+- src/modules/support/support.routes.ts
+- all other V2.5.1 PayPal-hardening patch files
+
+Website behavior:
+- Stripe is not offered in customer checkout.
+- PayPal is the primary checkout.
+- Google Pay and Apple Pay are loaded through PayPal and shown only when eligible.
+- Legacy server-side Stripe compatibility may remain for historical records; it is not a new website checkout option.
+- Marketplace checkout is paused until a PayPal-compatible multiparty payout flow is implemented.

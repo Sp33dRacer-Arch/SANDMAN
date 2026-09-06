@@ -620,6 +620,7 @@ model Order {
   billingAddress         Json?
   stripePaymentIntentId  String?           @unique
   paypalOrderId          String?           @unique
+  paypalCaptureId        String?           @unique
   paymentProvider        String?
   customerNote           String?
   internalNote           String?

@@ -8,7 +8,7 @@ import { routeParam } from '../../lib/route-param';
 import { requireAuth, requireRole } from '../../middleware/auth';
 import { createNotification } from '../../services/notification.service';
 import { getStripe } from '../../services/stripe.service';
-import { refundPayPalOrder } from '../../services/paypal.service';
+import { refundPayPalCapture, refundPayPalOrder } from '../../services/paypal.service';
 import { blockMarketplacePayoutsForCase, markMarketplacePayoutReady, prepareMarketplacePayouts, processReadyStripeMarketplacePayouts } from '../../services/marketplace-payout.service';
 import { recomputeOrderFulfillmentStatus, releaseRefundedSupplierReservations } from '../../services/order-lifecycle.service';
 import { isSandmanCloudinaryUrl } from '../../lib/media-url';
@@ -299,7 +299,9 @@ supportRouter.post('/admin/cases/:id/refund', requireRole('ADMIN'), asyncHandler
       externalRefundId = refund.id;
     } else if (provider === 'paypal') {
       if (!order.paypalOrderId) throw new HttpError(409, 'PayPal order reference is missing');
-      const refund = await refundPayPalOrder(order.paypalOrderId, body.amountCents, order.currency, `refund-${supportCase.id}`);
+      const refund = order.paypalCaptureId
+        ? await refundPayPalCapture(order.paypalCaptureId, body.amountCents, order.currency, `case-${supportCase.id}`)
+        : await refundPayPalOrder(order.paypalOrderId, body.amountCents, order.currency, `case-${supportCase.id}`);
       externalRefundId = refund.id;
     } else {
       throw new HttpError(409, 'This payment method requires a manual refund outside SANDMAN. Record the case resolution after sending it.');

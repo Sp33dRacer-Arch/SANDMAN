@@ -1,0 +1,15 @@
+SANDMAN V2.5.2 PAYPAL + WALLETS CUMULATIVE FIX
+
+This cumulative patch is for a SANDMAN V2.5 backend that did NOT separately install V2.5.1.
+It includes all V2.5.1 PayPal hardening files plus the V2.5.2 website wallet changes.
+
+Safe overlay from PowerShell:
+robocopy "$env:USERPROFILE\Downloads\SANDMAN-V2.5.2-WALLETS-CUMULATIVE-FIX" "$env:USERPROFILE\Downloads\SANDMAN-backend" /E /XD .git node_modules /XF .env /R:1 /W:1
+
+Then in SANDMAN-backend:
+npm install
+npm approve-scripts @prisma/client @prisma/engines esbuild prisma
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.5.2-WALLETS.ps1"
+
+Do not run npm audit fix --force.
+Do not deploy until the verifier passes.

@@ -1,21 +1,20 @@
 import { Router } from 'express';
 import { env } from '../../config/env';
-import { paypalConfigured } from '../../services/paypal.service';
+import { paypalConfigured, paypalWebhookConfigured } from '../../services/paypal.service';
 
 export const paymentsRouter = Router();
 
 paymentsRouter.get('/config', (_req, res) => {
   res.json({
     currency: env.CURRENCY,
-    stripe: {
-      enabled: Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_PUBLISHABLE_KEY),
-      publishableKey: env.STRIPE_PUBLISHABLE_KEY || null,
-      description: 'Eligible cards, wallets, bank methods, BNPL and local payment methods are shown dynamically by Stripe.',
-    },
+    primaryProvider: 'paypal',
     paypal: {
       enabled: paypalConfigured(),
       clientId: env.PAYPAL_CLIENT_ID || null,
       mode: env.PAYPAL_MODE,
+      webhookReady: paypalWebhookConfigured(),
+      description: 'Primary SANDMAN checkout. PayPal handles PayPal, Google Pay and Apple Pay eligibility while SANDMAN captures server-side with verified webhooks.',
+      wallets: { googlePay: true, applePay: true, eligibilityCheckedInBrowser: true },
     },
     bankTransfer: {
       enabled: Boolean(env.BANK_TRANSFER_INSTRUCTIONS),
@@ -24,7 +23,9 @@ paymentsRouter.get('/config', (_req, res) => {
     },
     marketplace: {
       commissionPercent: env.MARKETPLACE_COMMISSION_PERCENT,
-      payoutProvider: 'Stripe Connect',
+      checkoutEnabled: false,
+      payoutProvider: null,
+      note: 'Marketplace checkout is paused until a PayPal-compatible multiparty payout flow is approved and implemented.',
     },
   });
 });

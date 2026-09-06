@@ -1,0 +1,40 @@
+SANDMAN V2.5.1 PayPal-first hardening patch
+Base: SANDMAN V2.5.0 (commit 93e3d65)
+
+Purpose
+- Make PayPal the default/primary ordinary checkout provider.
+- Harden PayPal Orders v2 create/capture/refund flows.
+- Add signed raw-body PayPal webhook verification and event deduplication.
+- Persist PayPal capture IDs for reliable refunds.
+- Send merchant-provided physical shipping addresses to PayPal.
+- Add PayPal-specific launch-readiness checks and storefront/admin messaging.
+- Preserve Stripe as an optional fallback/current marketplace path; this patch does not claim PayPal multiparty marketplace payouts.
+
+Files
+CHANGELOG-V2.5.1-PAYPAL.md
+INSTALL-V2.5.1-PAYPAL.txt
+VERIFY-V2.5.1-PAYPAL.ps1
+package.json
+prisma/schema.prisma
+prisma/migrations/20260905153000_v251_paypal_hardening/migration.sql
+public/admin/app.js
+public/store/app.js
+scripts/static-v24-audit.mjs
+scripts/static-v25-audit.mjs
+scripts/static-paypal-audit.mjs
+src/app.ts
+src/config/env.ts
+src/modules/admin/readiness.routes.ts
+src/modules/orders/orders.routes.ts
+src/modules/payments/payments.routes.ts
+src/modules/support/support.routes.ts
+src/modules/webhooks/webhooks.routes.ts
+src/services/paypal.service.ts
+
+Excluded intentionally
+.env
+.git
+node_modules
+package-lock.json
+all pre-existing migration history
+all secrets/credentials

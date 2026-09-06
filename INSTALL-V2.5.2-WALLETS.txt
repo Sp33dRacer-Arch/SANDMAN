@@ -1,0 +1,29 @@
+SANDMAN V2.5.2 PAYPAL + GOOGLE PAY + APPLE PAY
+
+1. Back up your current SANDMAN-backend folder.
+2. Extract SANDMAN-V2.5.2-WALLETS-PATCH.zip to Downloads.
+3. Overlay the patch into your existing backend without copying .env/.git:
+
+robocopy "$env:USERPROFILE\Downloads\SANDMAN-V2.5.2-WALLETS-PATCH" "$env:USERPROFILE\Downloads\SANDMAN-backend" /E /XD .git node_modules /XF .env /R:1 /W:1
+
+4. In VS Code PowerShell, inside SANDMAN-backend, run:
+
+npm install
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.5.2-WALLETS.ps1"
+
+5. Do not run npm audit fix --force.
+
+PAYPAL / WALLET GO-LIVE REQUIREMENTS
+- PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET and PAYPAL_WEBHOOK_ID must be configured.
+- Enable Google Pay and Apple Pay for the PayPal app if PayPal offers those features for the merchant account.
+- Google Pay must pass PayPal/Google eligibility for the actual buyer device/browser/country.
+- Apple Pay requires PayPal/Apple merchant eligibility and domain registration.
+- Download the Apple Pay domain-association file from PayPal and place the exact file at:
+  public\apple-developer-merchantid-domain-association
+  The app serves it at:
+  /.well-known/apple-developer-merchantid-domain-association
+- Test PayPal, Google Pay and Apple Pay separately in sandbox/eligible environments before marking them production-ready.
+
+NOTE
+Stripe is removed from the WEBSITE checkout. Legacy server-side Stripe/webhook/payout code remains for historical orders only and is not advertised or selectable by customers.
+Marketplace checkout is paused until a safe PayPal-compatible multiparty payout solution is implemented.

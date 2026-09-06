@@ -1,0 +1,29 @@
+SANDMAN V2.5.2 PayPal Wallets Patch
+
+Purpose:
+- Remove Stripe from the customer-facing website checkout and admin payment UI.
+- Keep PayPal as the primary checkout provider.
+- Add Google Pay and Apple Pay through PayPal's wallet integrations, gated by real browser/account eligibility.
+- Pause new marketplace checkout until a PayPal-compatible multiparty seller-payout flow is implemented.
+
+This patch intentionally retains legacy server-side Stripe-related database/service compatibility for historical orders and records. It does not expose Stripe as a new website checkout option.
+
+Files included:
+CHANGELOG-V2.5.2-WALLETS.md
+INSTALL-V2.5.2-WALLETS.txt
+VERIFY-V2.5.2-WALLETS.ps1
+package.json
+public/admin/app.js
+public/store/app.js
+public/store/styles.css
+scripts/static-paypal-audit.mjs
+scripts/static-v24-audit.mjs
+scripts/static-v25-audit.mjs
+scripts/static-wallet-audit.mjs
+src/app.ts
+src/modules/admin/admin.routes.ts
+src/modules/admin/readiness.routes.ts
+src/modules/orders/orders.routes.ts
+src/modules/payments/payments.routes.ts
+src/services/global-commerce.service.ts
+src/services/paypal.service.ts
