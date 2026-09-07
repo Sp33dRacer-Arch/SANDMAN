@@ -435,10 +435,11 @@
     const suppliers = await api('/api/admin/suppliers');
     state.cache.suppliers = suppliers;
     const cards = suppliers.length ? suppliers.map(supplier => `
-      <article class="supplier-card">
+      <article class="supplier-card ${supplier.code === 'vinyasa' ? 'supplier-card-clickable' : ''}" ${supplier.code === 'vinyasa' ? 'role="button" tabindex="0" data-action="open-vinyasa"' : ''}>
         <div class="supplier-card-head"><div class="supplier-symbol">${esc((supplier.code || supplier.name).slice(0,2).toUpperCase())}</div>${badge(supplier.active ? 'ACTIVE' : 'ARCHIVED')}</div>
         <h3>${esc(supplier.name)}</h3><p>${esc(supplier.type)} · priority ${esc(supplier.priority)} · ${esc(supplier.code)}</p>
         <div class="supplier-stats"><span>${esc(supplier._count.products)} linked SKUs</span><span>${esc(supplier._count.fulfillments)} fulfillments</span></div>
+        ${supplier.code === 'vinyasa' ? '<div class="supplier-open-hint">Manage catalogue, pricing & automation →</div>' : ''}
       </article>`).join('') : `<div class="empty-state"><div><b>No suppliers</b><span>Add CJ, a wholesaler, or a custom supplier.</span></div></div>`;
     viewRoot.innerHTML = `<section class="supplier-grid">${cards}</section><section class="panel panel-pad"><div class="eyebrow">ROUTING LOGIC</div><p style="font-size:11px;color:var(--muted);line-height:1.7;margin:0">At checkout SANDMAN compares active supplier links for each product. Your backend can route orders by supplier priority, stock and landed cost, then split a cart across multiple fulfillment sources.</p></section>`;
   }
@@ -855,6 +856,145 @@
       <div class="modal-footer">${canMarkPaid ? `<button class="btn" data-action="mark-order-paid" data-id="${esc(order.id)}">Mark paid + fulfill</button>` : ''}<select id="modal-order-status" style="width:auto">${['PENDING_PAYMENT','PAID','PROCESSING','SUBMITTED_TO_SUPPLIER','PARTIALLY_FULFILLED','FULFILLED','CANCELLED','REFUNDED','FAILED'].map(v => `<option value="${v}" ${order.status === v ? 'selected' : ''}>${v.replaceAll('_',' ')}</option>`).join('')}</select><button class="btn btn-primary" data-action="save-order-status" data-id="${esc(order.id)}">Update status</button></div>`, 'modal-lg');
   }
 
+  function vinyasaPricingTable(items = []) {
+    if (!items.length) return '<div class="empty-state"><div><b>No Vinyasa products linked yet</b><span>Run Import all products to create and connect the catalogue.</span></div></div>';
+    return `<div class="table-wrap"><table><thead><tr><th>Product</th><th>Dealer cost</th><th>Vinyasa RRP</th><th>Recommended</th><th>Current</th><th>Profit</th><th>Markup</th><th>Stock</th><th></th></tr></thead><tbody>${items.map(item => `<tr>
+      <td><strong>${esc(item.product.name)}</strong><br><span class="subtle">${esc(item.product.sku)}</span></td>
+      <td>${esc(money(item.costCents + item.shippingCents, item.currency))}<br><span class="subtle">landed</span></td>
+      <td>${item.suggestedRetailCents == null ? '—' : esc(money(item.suggestedRetailCents, item.currency))}</td>
+      <td><strong>${esc(money(item.recommended.priceCents, item.currency))}</strong><br><span class="subtle">${esc(item.recommended.source.replaceAll('_',' '))}</span></td>
+      <td>${esc(money(item.currentPriceCents, item.currency))}</td>
+      <td><strong>${esc(money(item.recommended.grossProfitCents, item.currency))}</strong><br><span class="subtle">${esc(item.recommended.marginPercent)}% margin</span></td>
+      <td>${esc(item.recommended.markupPercent)}%</td>
+      <td>${item.availableStock == null ? '—' : esc(item.availableStock)}</td>
+      <td class="text-right"><button class="table-action" type="button" data-action="vinyasa-price-override" data-id="${esc(item.id)}" data-markup="${esc(item.markupOverridePercent ?? '')}" data-retail="${esc(item.retailOverrideCents ?? '')}">PRICING</button></td>
+    </tr>`).join('')}</tbody></table></div>`;
+  }
+
+  async function openVinyasaModal() {
+    const [status, pricing] = await Promise.all([
+      api('/api/admin/vinyasa/status'),
+      api('/api/admin/vinyasa/products?take=100'),
+    ]);
+    const c = status.config;
+    const last = status.syncRuns?.[0];
+    openModal(`<div class="modal-header"><div><h2>Vinyasa automation</h2><p>Live catalogue import, profit pricing, stock sync and paid-order fulfillment</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div>
+      <div class="modal-body">
+        <section class="metric-grid vinyasa-metrics">
+          ${metric('API', status.configured ? 'CONNECTED' : 'NOT CONFIGURED', status.apiKeyPresent ? 'Server API credential present' : 'Add the Vinyasa credential in the backend environment', '⇄')}
+          ${metric('Linked products', status.linkedProducts, `${status.activeProducts} active`, '◇')}
+          ${metric('Last sync', last ? last.status : 'NEVER', last ? dateTime(last.startedAt) : 'No catalogue sync yet', '↻')}
+          ${metric('Auto sync', c.autoSyncEnabled ? `${c.syncIntervalMinutes} min` : 'OFF', `${c.importJobStatus || 'IDLE'} · ${c.importJobProcessed || 0} imported`, '⚙')}
+        </section>
+        <section class="vinyasa-callout"><strong>Payment & fulfilment safety</strong><span>Customer payments go to SANDMAN first. Automatic Vinyasa order submission stays OFF until you verify Vinyasa's authenticated order contract. Catalogue importing, pricing and stock sync can run independently.</span></section>
+        <div class="toolbar vinyasa-actions"><div class="toolbar-left">
+          <button class="btn" type="button" data-action="vinyasa-test">Test Vinyasa API</button>
+          <button class="btn" type="button" data-action="vinyasa-preview">Preview feed</button>
+          <button class="btn btn-primary" type="button" data-action="vinyasa-import">Import all products</button>
+          <button class="btn" type="button" data-action="vinyasa-stock-sync">Sync stock + prices</button>
+          <button class="btn" type="button" data-action="vinyasa-tracking-sync">Sync tracking</button>
+          <button class="btn" type="button" data-action="vinyasa-reprice">Reprice catalogue</button>
+        </div></div>
+        <div id="vinyasa-feed-preview"></div>
+        <form id="vinyasa-settings-form" class="data-panel vinyasa-settings" style="margin-top:18px">
+          <div class="panel-header"><h2>Pricing & automation</h2><span class="subtle">10%–800% markup guardrails</span></div>
+          <div class="form-grid panel-form-pad">
+            <label class="field"><span>Default markup %</span><input name="defaultMarkupPercent" type="number" min="10" max="800" step="0.1" value="${esc(c.defaultMarkupPercent)}" required /></label>
+            <label class="field"><span>Minimum markup %</span><input name="minMarkupPercent" type="number" min="10" max="800" step="0.1" value="${esc(c.minMarkupPercent)}" required /></label>
+            <label class="field"><span>Maximum markup %</span><input name="maxMarkupPercent" type="number" min="10" max="800" step="0.1" value="${esc(c.maxMarkupPercent)}" required /></label>
+            <label class="field"><span>Low-cost threshold</span><input name="lowCostThreshold" type="number" min="0.01" step="0.01" value="${esc((c.lowCostThresholdCents/100).toFixed(2))}" /></label>
+            <label class="field"><span>Low-cost markup %</span><input name="lowCostMarkupPercent" type="number" min="10" max="800" step="0.1" value="${esc(c.lowCostMarkupPercent)}" /></label>
+            <label class="field"><span>Mid-cost threshold</span><input name="midCostThreshold" type="number" min="0.01" step="0.01" value="${esc((c.midCostThresholdCents/100).toFixed(2))}" /></label>
+            <label class="field"><span>Mid-cost markup %</span><input name="midCostMarkupPercent" type="number" min="10" max="800" step="0.1" value="${esc(c.midCostMarkupPercent)}" /></label>
+            <label class="field"><span>High-cost markup %</span><input name="highCostMarkupPercent" type="number" min="10" max="800" step="0.1" value="${esc(c.highCostMarkupPercent)}" /></label>
+            <label class="field"><span>Price ending</span><select name="priceRounding"><option value="ENDING_99" ${c.priceRounding==='ENDING_99'?'selected':''}>End in .99</option><option value="ENDING_95" ${c.priceRounding==='ENDING_95'?'selected':''}>End in .95</option><option value="NEAREST_100" ${c.priceRounding==='NEAREST_100'?'selected':''}>Whole amount</option><option value="NONE" ${c.priceRounding==='NONE'?'selected':''}>No rounding</option></select></label>
+            <label class="field"><span>Sync interval (minutes)</span><input name="syncIntervalMinutes" type="number" min="5" max="1440" value="${esc(c.syncIntervalMinutes)}" /></label>
+            <label class="field"><span>Supplier payment</span><select name="paymentMode"><option value="wallet" ${c.paymentMode==='wallet'?'selected':''}>Vinyasa wallet</option><option value="card_on_file" ${c.paymentMode==='card_on_file'?'selected':''}>Card on file</option><option value="manual" ${c.paymentMode==='manual'?'selected':''}>Manual payment</option></select></label>
+            <label class="field"><span>Page size</span><input name="pageSize" type="number" min="1" max="500" value="${esc(c.pageSize)}" /></label>
+            <label class="field"><span>Import safety limit</span><input name="maxImportProducts" type="number" min="1" max="1000000" value="${esc(c.maxImportProducts)}" /></label>
+            <label class="field"><span>Supplier price units</span><select name="supplierMoneyUnit"><option value="UNCONFIRMED" ${c.supplierMoneyUnit==='UNCONFIRMED'?'selected':''}>Unconfirmed — block import</option><option value="MAJOR" ${c.supplierMoneyUnit==='MAJOR'?'selected':''}>Major units (75.50 = $75.50)</option><option value="MINOR" ${c.supplierMoneyUnit==='MINOR'?'selected':''}>Minor units (7550 = $75.50)</option></select></label>
+            <label class="field"><span>Order payload style</span><select name="orderPayloadStyle"><option value="CAMEL" ${c.orderPayloadStyle==='CAMEL'?'selected':''}>camelCase</option><option value="SNAKE" ${c.orderPayloadStyle==='SNAKE'?'selected':''}>snake_case</option></select></label>
+            <label class="field span-2"><span>Products API path</span><input name="productsPath" value="${esc(c.productsPath)}" /></label>
+            <label class="field"><span>Orders API path</span><input name="ordersPath" value="${esc(c.ordersPath)}" /></label>
+            <label class="field"><span>Order status path</span><input name="orderStatusPathTemplate" value="${esc(c.orderStatusPathTemplate)}" /></label>
+            <label class="check-field"><input name="adaptivePricingEnabled" type="checkbox" ${c.adaptivePricingEnabled?'checked':''} /><span>Use adaptive markups by dealer/landed cost when no product/category override or valid Vinyasa RRP applies</span></label>
+            <label class="check-field"><input name="useSupplierRetail" type="checkbox" ${c.useSupplierRetail?'checked':''} /><span>Prefer Vinyasa recommended retail price when it falls inside your markup guardrails</span></label>
+            <label class="check-field"><input name="autoPublish" type="checkbox" ${c.autoPublish?'checked':''} /><span>Automatically publish imported in-stock products</span></label>
+            <label class="check-field"><input name="autoSyncEnabled" type="checkbox" ${c.autoSyncEnabled?'checked':''} /><span>Automatically sync Vinyasa stock and prices</span></label>
+            <label class="check-field"><input name="deactivateMissing" type="checkbox" ${c.deactivateMissing?'checked':''} /><span>Archive Vinyasa links missing from a completed full feed</span></label>
+            <label class="check-field"><input name="overwriteProductContent" type="checkbox" ${c.overwriteProductContent?'checked':''} /><span>Keep names, descriptions and specifications synced from Vinyasa</span></label>
+            <label class="check-field"><input name="overwriteImages" type="checkbox" ${c.overwriteImages?'checked':''} /><span>Keep product images synced from Vinyasa</span></label>
+            <label class="check-field"><input name="orderSubmissionEnabled" type="checkbox" ${c.orderSubmissionEnabled?'checked':''} /><span>Enable automatic Vinyasa order submission only after the real authenticated order API has been verified</span></label>
+          </div>
+          <div class="modal-footer inline-footer"><span class="subtle">API secrets stay in Railway / backend environment variables and are never shown here.</span><button class="btn btn-primary" type="submit">Save Vinyasa settings</button></div>
+        </form>
+        <section class="data-panel" style="margin-top:18px"><div class="panel-header"><h2>Linked Vinyasa products</h2><span class="subtle">Recommended retail + profit preview</span></div>${vinyasaPricingTable(pricing.items)}</section>
+      </div>`, 'modal-xl');
+    enhanceResponsiveTables(modalRoot);
+  }
+
+  function renderVinyasaPreview(items) {
+    const node = $('#vinyasa-feed-preview');
+    if (!node) return;
+    node.innerHTML = `<section class="data-panel" style="margin-top:14px"><div class="panel-header"><h2>Live Vinyasa feed preview</h2><span class="subtle">Nothing is imported by preview</span></div><div class="table-wrap"><table><thead><tr><th>SKU</th><th>Product</th><th>Dealer cost</th><th>Vinyasa RRP</th><th>SANDMAN recommended</th><th>Profit</th><th>Markup</th><th>Stock</th></tr></thead><tbody>${items.length ? items.map(item => `<tr><td>${esc(item.supplierSku)}</td><td><strong>${esc(item.name)}</strong><br><span class="subtle">${esc(item.brand || item.categoryName || '')}</span></td><td>${esc(money(item.costCents + item.shippingCents,item.currency))}</td><td>${item.suggestedRetailCents==null?'—':esc(money(item.suggestedRetailCents,item.currency))}</td><td><strong>${esc(money(item.recommended.priceCents,item.currency))}</strong></td><td>${esc(money(item.recommended.grossProfitCents,item.currency))}</td><td>${esc(item.recommended.markupPercent)}%</td><td>${item.stock==null?'—':esc(item.stock)}</td></tr>`).join('') : '<tr><td colspan="8">No products were returned by the configured feed endpoint.</td></tr>'}</tbody></table></div></section>`;
+    enhanceResponsiveTables(node);
+  }
+
+  async function submitVinyasaSettingsForm(form) {
+    const fd = new FormData(form);
+    const payload = {
+      defaultMarkupPercent:Number(fd.get('defaultMarkupPercent')),
+      minMarkupPercent:Number(fd.get('minMarkupPercent')),
+      maxMarkupPercent:Number(fd.get('maxMarkupPercent')),
+      adaptivePricingEnabled:fd.has('adaptivePricingEnabled'),
+      lowCostThresholdCents:Math.round(Number(fd.get('lowCostThreshold'))*100),
+      lowCostMarkupPercent:Number(fd.get('lowCostMarkupPercent')),
+      midCostThresholdCents:Math.round(Number(fd.get('midCostThreshold'))*100),
+      midCostMarkupPercent:Number(fd.get('midCostMarkupPercent')),
+      highCostMarkupPercent:Number(fd.get('highCostMarkupPercent')),
+      priceRounding:String(fd.get('priceRounding')),
+      syncIntervalMinutes:Number(fd.get('syncIntervalMinutes')),
+      paymentMode:String(fd.get('paymentMode')),
+      supplierMoneyUnit:String(fd.get('supplierMoneyUnit')),
+      orderPayloadStyle:String(fd.get('orderPayloadStyle')),
+      orderSubmissionEnabled:fd.has('orderSubmissionEnabled'),
+      pageSize:Number(fd.get('pageSize')),
+      maxImportProducts:Number(fd.get('maxImportProducts')),
+      productsPath:String(fd.get('productsPath')||'').trim(),
+      ordersPath:String(fd.get('ordersPath')||'').trim(),
+      orderStatusPathTemplate:String(fd.get('orderStatusPathTemplate')||'').trim(),
+      useSupplierRetail:fd.has('useSupplierRetail'),
+      autoPublish:fd.has('autoPublish'),
+      autoSyncEnabled:fd.has('autoSyncEnabled'),
+      deactivateMissing:fd.has('deactivateMissing'),
+      overwriteProductContent:fd.has('overwriteProductContent'),
+      overwriteImages:fd.has('overwriteImages'),
+    };
+    await api('/api/admin/vinyasa/settings',{method:'PATCH',body:JSON.stringify(payload)});
+    toast('Vinyasa settings saved','Pricing and automation rules updated.');
+    await openVinyasaModal();
+  }
+
+  async function editVinyasaProductPricing(actionEl) {
+    const raw = prompt('Enter markup % from 10 to 800. Type AUTO to use catalogue rules, or RETAIL to set a fixed selling price.', actionEl.dataset.markup || 'AUTO');
+    if (raw == null) return;
+    const value = raw.trim().toUpperCase();
+    let payload;
+    if (value === 'AUTO' || value === '') payload = { autoPrice:true, markupOverridePercent:null, retailOverrideCents:null, applyNow:true };
+    else if (value === 'RETAIL') {
+      const amount = Number(prompt('Fixed retail selling price in USD:', actionEl.dataset.retail ? (Number(actionEl.dataset.retail)/100).toFixed(2) : ''));
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error('Enter a valid retail price.');
+      payload = { autoPrice:true, markupOverridePercent:null, retailOverrideCents:Math.round(amount*100), applyNow:true };
+    } else {
+      const markup = Number(raw);
+      if (!Number.isFinite(markup) || markup < 10 || markup > 800) throw new Error('Markup must be between 10% and 800%.');
+      payload = { autoPrice:true, markupOverridePercent:markup, retailOverrideCents:null, applyNow:true };
+    }
+    await api(`/api/admin/vinyasa/products/${actionEl.dataset.id}/pricing`,{method:'PATCH',body:JSON.stringify(payload)});
+    toast('Product pricing updated');
+    await openVinyasaModal();
+  }
+
   async function openSupplierModal() {
     openModal(`<form id="supplier-form"><div class="modal-header"><div><h2>Add supplier</h2><p>Connect a dropship or wholesale source</p></div><button type="button" class="icon-btn" data-modal-close>×</button></div><div class="modal-body"><div class="form-grid"><label class="field"><span>Name</span><input name="name" required placeholder="CJ Dropshipping" /></label><label class="field"><span>Code</span><input name="code" required placeholder="cj" /></label><label class="field"><span>Type</span><select name="type"><option>CJ</option><option>SYNCEE</option><option>CUSTOM</option><option>MOCK</option></select></label><label class="field"><span>Priority</span><input name="priority" type="number" min="1" value="100" /></label><label class="field span-2"><span>Base API URL (optional)</span><input name="baseUrl" type="url" placeholder="https://supplier-api.example.com" /></label></div></div><div class="modal-footer"><button type="button" class="btn" data-modal-close>Cancel</button><button class="btn btn-primary" type="submit">Add supplier</button></div></form>`);
   }
@@ -1008,6 +1148,48 @@
       else if (action === 'edit-product') await openProductModal(actionEl.dataset.id);
       else if (action === 'view-order') await openOrderModal(actionEl.dataset.id);
       else if (action === 'add-supplier') await openSupplierModal();
+      else if (action === 'open-vinyasa') await openVinyasaModal();
+      else if (action === 'vinyasa-test') {
+        actionEl.disabled = true; actionEl.textContent = 'Testing…';
+        const result = await api('/api/admin/vinyasa/test',{method:'POST'});
+        toast('Vinyasa API connected', result.detectedProductsPath ? `Products endpoint: ${result.detectedProductsPath}` : 'Connection successful.');
+        await openVinyasaModal();
+      }
+      else if (action === 'vinyasa-preview') {
+        actionEl.disabled = true; actionEl.textContent = 'Loading…';
+        const result = await api('/api/admin/vinyasa/preview?limit=20');
+        renderVinyasaPreview(result.items || []);
+        actionEl.disabled = false; actionEl.textContent = 'Preview feed';
+      }
+      else if (action === 'vinyasa-import') {
+        if (confirm('Import the Vinyasa catalogue and automatically apply your retail-pricing rules?')) {
+          actionEl.disabled = true; actionEl.textContent = 'Starting…';
+          const result = await api('/api/admin/vinyasa/import-job',{method:'POST',body:JSON.stringify({})});
+          toast('Vinyasa import started', result.started === false ? `Existing job: ${result.status}` : 'Large catalogue import is running in resumable background batches.');
+          await openVinyasaModal(); await renderSuppliers();
+        }
+      }
+      else if (action === 'vinyasa-stock-sync') {
+        actionEl.disabled = true; actionEl.textContent = 'Syncing…';
+        const result = await api('/api/admin/vinyasa/sync',{method:'POST',body:JSON.stringify({mode:'STOCK_PRICE'})});
+        toast('Vinyasa stock sync complete', `${result.productsUpdated} linked products refreshed · ${result.priceUpdates} repriced`);
+        await openVinyasaModal();
+      }
+      else if (action === 'vinyasa-tracking-sync') {
+        actionEl.disabled = true; actionEl.textContent = 'Checking…';
+        const result = await api('/api/admin/vinyasa/tracking-sync',{method:'POST',body:JSON.stringify({limit:200})});
+        toast('Vinyasa tracking synced', `${result.updated} updated · ${result.errors} errors`);
+        await openVinyasaModal();
+      }
+      else if (action === 'vinyasa-reprice') {
+        if (confirm('Recalculate all auto-priced Vinyasa products using the current 10%–800% rules?')) {
+          actionEl.disabled = true;
+          const result = await api('/api/admin/vinyasa/reprice',{method:'POST'});
+          toast('Vinyasa catalogue repriced', `${result.updated} prices changed.`);
+          await openVinyasaModal();
+        }
+      }
+      else if (action === 'vinyasa-price-override') await editVinyasaProductPricing(actionEl);
       else if (action === 'link-supplier-product') await openSupplierProductModal();
       else if (action === 'add-vehicle') await openVehicleModal();
       else if (action === 'add-model') await openVehicleModelModal();
@@ -1119,6 +1301,7 @@
         await api('/api/admin/ops/pricing-rules', { method:'POST', body:JSON.stringify({ name:String(fd.get('name') || '').trim(), ...(markupRaw ? { markupPercent:Number(markupRaw) } : {}), ...(profitRaw ? { minimumProfitCents:Math.round(Number(profitRaw) * 100) } : {}) }) });
         toast('Pricing rule created'); await renderOperations();
       } else if (form.id === 'product-form') await submitProductForm(form);
+      else if (form.id === 'vinyasa-settings-form') await submitVinyasaSettingsForm(form);
       else if (form.id === 'supplier-form') await submitSupplierForm(form);
       else if (form.id === 'supplier-product-form') await submitSupplierProductForm(form);
       else if (form.id === 'vehicle-form') await submitVehicleForm(form);

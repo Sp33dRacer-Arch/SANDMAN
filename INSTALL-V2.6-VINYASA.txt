@@ -1,0 +1,24 @@
+SANDMAN V2.6 VINYASA — BACKEND-DIRECT INSTALL
+
+Target folder:
+C:\Users\asand\Downloads\SANDMAN-backend
+
+1. Back up or commit your current V2.5.2 backend first.
+2. Extract SANDMAN-V2.6-VINYASA-BACKEND-DIRECT.zip directly into SANDMAN-backend with -Force.
+3. Do not overwrite or commit .env. The ZIP does not contain .env.
+4. In the SANDMAN-backend terminal run:
+   npm install
+5. If npm reports pending install scripts, approve only the already-used Prisma/esbuild packages:
+   npm approve-scripts @prisma/client @prisma/engines esbuild prisma
+6. Run:
+   powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.6-VINYASA.ps1"
+7. Only after local verification passes, commit/push and let Railway deploy.
+8. Railway must still run:
+   Build: npm run prisma:generate && npm run build
+   Pre-deploy: npm run prisma:deploy
+   Start: node dist/src/server.js
+9. Add VINYASA_API_KEY and SANDMAN_VINYASA_SYNC_API_KEY only to backend/Railway secrets. Never paste either into public JS, HTML, GitHub or screenshots.
+10. In Admin > Suppliers > Vinyasa: Test API -> Preview feed -> review pricing -> Import all products.
+11. Test one controlled paid order and supplier tracking before treating live fulfillment as certified.
+
+Do NOT run npm audit fix --force.

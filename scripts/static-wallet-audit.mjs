@@ -16,7 +16,7 @@ let failed=false;
 const pass=m=>console.log(`PASS: ${m}`);
 const fail=m=>{failed=true;console.error(`FAIL: ${m}`)};
 const check=(c,m)=>c?pass(m):fail(m);
-check(pkg.version==='2.5.2'&&app.includes("version: '2.5.2'"),'V2.5.2 package/runtime markers');
+check(pkg.version==='2.6.1'&&app.includes("version: '2.6.1'"),'V2.6.1 package/runtime markers');
 check(!store.includes('renderStripePayment')&&!store.includes('js.stripe.com')&&!store.includes("value:'stripe'")&&!/Stripe/i.test(store),'Stripe removed from customer-facing checkout and storefront copy');
 check(!payments.includes('stripe: {')&&!payments.includes('Stripe Connect'),'payment config no longer exposes Stripe to website');
 check(orders.includes("z.enum(['paypal', 'bank_transfer'])")&&!orders.includes('paymentIntents.create'),'orders checkout no longer creates Stripe payments');
@@ -32,4 +32,4 @@ check(publicAdmin.includes('Google Pay')&&publicAdmin.includes('Apple Pay')&&!pu
 check(styles.includes('apple-pay-button')&&styles.includes('.wallet-stack'),'wallet UI styling present');
 check(!store.includes('PAYPAL_CLIENT_SECRET')&&!publicAdmin.includes('PAYPAL_CLIENT_SECRET'),'PayPal secret remains server-only');
 if(failed)process.exit(1);
-console.log('SANDMAN V2.5.2 wallet audit passed.');
+console.log('SANDMAN V2.6.1 wallet audit passed.');

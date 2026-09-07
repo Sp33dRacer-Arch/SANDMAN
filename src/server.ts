@@ -2,10 +2,12 @@ import { app } from './app';
 import { env } from './config/env';
 import { prisma } from './lib/prisma';
 import { releaseExpiredCheckoutReservations } from './services/checkout-reservation.service';
+import { startVinyasaScheduler, stopVinyasaScheduler } from './services/vinyasa-scheduler.service';
 
 const server = app.listen(env.PORT, () => {
   console.log(`SANDMAN API running on ${env.API_URL} (port ${env.PORT})`);
   void releaseExpiredCheckoutReservations().catch(error => console.error('Initial checkout reservation cleanup failed', error));
+  startVinyasaScheduler();
 });
 
 const reservationCleanupTimer = setInterval(() => {
@@ -15,6 +17,7 @@ const reservationCleanupTimer = setInterval(() => {
 async function shutdown(signal: string) {
   console.log(`${signal} received. Shutting down SANDMAN...`);
   clearInterval(reservationCleanupTimer);
+  await stopVinyasaScheduler();
   server.close(async () => {
     await prisma.$disconnect();
     process.exit(0);

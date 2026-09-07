@@ -1,0 +1,34 @@
+SANDMAN V2.6.1 VINYASA HARDENING — SOURCE/STATIC SCAN
+Date: 2026-09-06
+
+PASS:
+- V2.4 security baseline audit
+- V2.5 global commerce/customer intelligence audit
+- PayPal hardening audit
+- Apple Pay / Google Pay wallet audit
+- Vinyasa V2.6.1 hardening audit
+- browser JavaScript syntax
+- 92 TypeScript files parsed with 0 syntax errors in reconstructed runtime
+- 0 missing relative imports
+- numeric inventory normalization test
+- MAJOR/MINOR money-unit normalization test
+- unknown stock fail-closed test
+- no live Vinyasa/SANDMAN sync secret embedded in patch
+- V2.6 + V2.6.1 migrations contain no obvious destructive SQL
+
+V2.6.1 fixes:
+- background/resumable large-catalog imports
+- 1,000,000 configurable import ceiling
+- buyer-facing stock updates even when price is unchanged
+- unknown stock fails closed
+- API path credential-leak guard
+- explicit supplier money units
+- order submission disabled until verified
+- deterministic CAMEL/SNAKE order payload mode
+- clean-feed-only missing-product deactivation
+- sync lease decoupled from sync interval
+
+NOT YET LIVE-CERTIFIED:
+- actual Vinyasa authenticated order endpoint/payload
+- actual Vinyasa supplier charge and tracking E2E
+- dependency-backed local build on the user's machine after overlay

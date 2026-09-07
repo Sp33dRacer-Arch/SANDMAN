@@ -1,0 +1,29 @@
+SANDMAN V2.6 VINYASA STATIC/SOURCE SCAN
+
+PASS
+- public/admin/app.js syntax
+- public/store/app.js syntax
+- all scripts/*.mjs syntax
+- V2.4 security baseline static audit
+- V2.5 static audit
+- PayPal hardening static audit
+- PayPal/Google Pay/Apple Pay wallet static audit
+- V2.6 Vinyasa static audit
+- 92 TypeScript source/test files parsed with 0 syntax errors
+- 0 missing relative TypeScript imports
+- V2.6 migration contains no obvious DROP TABLE / TRUNCATE / DELETE FROM / DROP COLUMN operation
+- Vinyasa browser secret-leak marker scan: none found
+- Vinyasa pricing/normalizer runtime assertions: PASS
+- Adaptive 10%-800% pricing config is wired into the persisted Vinyasa integration config
+- Supplier RRP, per-product overrides and explicit PricingRule precedence implemented
+- Catalogue import, stock/price sync, paid-order adapter, tracking sync and admin controls present
+
+NOT CERTIFIED IN THIS ENVIRONMENT
+- dependency-backed Prisma generation/validation
+- full TypeScript semantic typecheck
+- Vitest suite against installed dependencies
+- production tsc build
+- live Vinyasa API catalogue request
+- live Vinyasa paid-order creation/charge/tracking
+
+Run VERIFY-V2.6-VINYASA.ps1 in your existing SANDMAN-backend after npm install. Then run the live Vinyasa Test API / Preview flow with the real dealer credential.

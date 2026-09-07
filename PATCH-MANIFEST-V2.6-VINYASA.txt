@@ -1,0 +1,21 @@
+SANDMAN V2.6 VINYASA BACKEND-DIRECT PATCH
+
+Core additions/changes:
+- package.json: 2.6.0 + Vinyasa scripts/audit
+- .env.example: Vinyasa server-only variables
+- prisma/schema.prisma + 20260906114500_v26_vinyasa_commerce migration
+- src/modules/vinyasa/vinyasa.routes.ts
+- src/services/vinyasa.service.ts
+- src/services/vinyasa-normalizer.ts
+- src/services/vinyasa-scheduler.service.ts
+- src/services/supplier-registry.ts
+- src/app.ts + src/server.ts
+- src/config/env.ts
+- src/modules/admin/readiness.routes.ts
+- public/admin/app.js + public/admin/styles.css
+- scripts/vinyasa-sync.mjs + static-vinyasa-audit.mjs
+- version-aware V2.4/V2.5/PayPal/wallet static audits
+- tests/vinyasa-pricing.test.ts
+- VERIFY-V2.6-VINYASA.ps1
+
+No .env or live supplier credential is included.

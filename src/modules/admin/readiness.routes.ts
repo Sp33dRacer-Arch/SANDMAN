@@ -65,7 +65,7 @@ readinessRouter.get('/', asyncHandler(async (_req, res) => {
     savedRows, suppliers, regions, taxRules, zones, fxRates, activeMarketplaceProducts,
   ] = await Promise.all([
     prisma.operationalReadiness.findMany(),
-    prisma.supplier.findMany({ where: { active: true }, select: { id: true, type: true, name: true } }),
+    prisma.supplier.findMany({ where: { active: true }, select: { id: true, type: true, name: true, code: true } }),
     prisma.commerceRegion.findMany({ orderBy: { country: 'asc' } }),
     prisma.taxRule.findMany({ where: { active: true }, select: { country: true, region: true } }),
     prisma.shippingZone.findMany({ where: { active: true }, select: { id: true, name: true, countries: true } }),
@@ -100,6 +100,7 @@ readinessRouter.get('/', asyncHandler(async (_req, res) => {
     .filter(currency => currency !== env.CURRENCY.toUpperCase() && !fxCurrencies.has(currency));
   const dutiesCountries = regions.filter(region => region.shippingAllowed && region.dutiesRequired).map(region => region.country);
   const nonMockSuppliers = suppliers.filter(supplier => supplier.type !== 'MOCK');
+  const vinyasaSupplier = suppliers.find(supplier => supplier.code.trim().toLowerCase() === 'vinyasa');
   const realEmailFrom = Boolean(env.EMAIL_FROM && !env.EMAIL_FROM.toLowerCase().endsWith('@sandman.local'));
 
   const checks: Check[] = [
@@ -111,6 +112,8 @@ readinessRouter.get('/', asyncHandler(async (_req, res) => {
     { key:'APPLE_PAY_E2E', category:'Commerce', label:'Apple Pay via PayPal', status:configured(env.PAYPAL_CLIENT_ID,env.PAYPAL_CLIENT_SECRET)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:'Apple Pay requires PayPal approval plus merchant-domain association at /.well-known/apple-developer-merchantid-domain-association before the button can work live.', mode:'CERTIFICATION' },
     { key:'MARKETPLACE_PAYOUTS', category:'Commerce', label:'Marketplace seller payouts', status:activeMarketplaceProducts>0?'NEEDS_CONFIGURATION':'NOT_APPLICABLE', detail:activeMarketplaceProducts>0?`${activeMarketplaceProducts} active marketplace product(s) exist. Checkout is intentionally paused until a PayPal-compatible multiparty payout solution is approved and implemented.`:'No active marketplace listings require a seller payout rail.', mode:activeMarketplaceProducts>0?'MANUAL':'AUTOMATIC' },
     { key:'SUPPLIER_FULFILLMENT_E2E', category:'Commerce', label:'Real supplier fulfillment', status:nonMockSuppliers.length?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:`${nonMockSuppliers.length} non-mock supplier(s). Test paid order → supplier → tracking → delivery/cancellation.`, mode:'CERTIFICATION' },
+    { key:'VINYASA_CATALOG_E2E', category:'Commerce', label:'Vinyasa live catalogue sync', status:vinyasaSupplier&&configured(env.VINYASA_API_KEY)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:vinyasaSupplier&&configured(env.VINYASA_API_KEY)?'Vinyasa supplier and API key are configured. Run Test API, preview, full import and stock/price sync before launch.':'Add/activate the Vinyasa supplier and configure VINYASA_API_KEY.', mode:'CERTIFICATION' },
+    { key:'VINYASA_ORDER_E2E', category:'Commerce', label:'Vinyasa paid-order handoff', status:vinyasaSupplier&&configured(env.VINYASA_API_KEY)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:`Payment mode: ${env.VINYASA_PAYMENT_MODE}. Test PayPal capture → Vinyasa order creation → supplier charge → tracking without using a customer-facing secret.`, mode:'CERTIFICATION' },
 
     { key:'CLOUDINARY_LIVE', category:'Identity & Media', label:'Cloudinary production upload', status:configured(env.CLOUDINARY_CLOUD_NAME,env.CLOUDINARY_API_KEY,env.CLOUDINARY_API_SECRET)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:'Test a signed upload using a verified production-like account.', mode:'CERTIFICATION' },
     { key:'MODERATION_LIVE', category:'Identity & Media', label:'Sightengine/moderation bridge', status:configured(env.CONTENT_MODERATION_WEBHOOK_URL,env.CONTENT_MODERATION_WEBHOOK_SECRET)?'NEEDS_TEST':'NEEDS_CONFIGURATION', detail:'Test safe image, blocked image and provider failure/fail-closed behavior.', mode:'CERTIFICATION' },

@@ -1,0 +1,17 @@
+SANDMAN V2.6.1 VINYASA — BACKEND-DIRECT INSTALL
+
+This ZIP is meant to be extracted directly into:
+C:\Users\asand\Downloads\SANDMAN-backend
+
+1. Back up the backend folder.
+2. Extract this ZIP directly into SANDMAN-backend with overwrite enabled.
+3. Run: npm install
+4. Run: npm approve-scripts @prisma/client @prisma/engines esbuild prisma
+5. Run: powershell -NoProfile -ExecutionPolicy Bypass -File ".\VERIFY-V2.6.1-VINYASA.ps1"
+6. Only commit/push if the verifier passes and git status confirms .env is not staged.
+
+Important configuration before importing products:
+- VINYASA_API_KEY must exist only in .env/Railway.
+- In Admin > Suppliers > Vinyasa, confirm supplier price units as MAJOR or MINOR.
+- Automatic Vinyasa order submission is OFF by default until the authenticated Vinyasa order endpoint/payload is verified.
+- npm install may update your existing package-lock.json; review and commit that normal lockfile change with the upgrade.

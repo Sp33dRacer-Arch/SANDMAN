@@ -545,6 +545,7 @@ model Supplier {
   fulfillments   Fulfillment[]
   pricingRules   PricingRule[]
   syncRuns       SupplierSyncRun[]
+  integrationConfig SupplierIntegrationConfig?
   createdAt      DateTime          @default(now())
   updatedAt      DateTime          @updatedAt
 }
@@ -565,6 +566,11 @@ model SupplierProduct {
   leadTimeDays      Int?
   warehouseCountry String?
   reliabilityScore Float?
+  suggestedRetailCents Int?
+  autoPrice         Boolean  @default(true)
+  markupOverridePercent Float?
+  retailOverrideCents Int?
+  lastPriceAppliedAt DateTime?
   lastSyncedAt      DateTime?
   rawData           Json?
   supplier          Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
@@ -1039,6 +1045,56 @@ model SupplierSyncRun {
   supplier      Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
 
   @@index([supplierId, startedAt])
+}
+
+model SupplierIntegrationConfig {
+  id                      String   @id @default(cuid())
+  supplierId              String   @unique
+  provider                String   @default("custom")
+  autoSyncEnabled         Boolean  @default(false)
+  syncIntervalMinutes     Int      @default(30)
+  defaultMarkupPercent    Float    @default(40)
+  minMarkupPercent        Float    @default(10)
+  maxMarkupPercent        Float    @default(800)
+  adaptivePricingEnabled  Boolean  @default(true)
+  lowCostThresholdCents   Int      @default(2500)
+  lowCostMarkupPercent    Float    @default(80)
+  midCostThresholdCents   Int      @default(10000)
+  midCostMarkupPercent    Float    @default(50)
+  highCostMarkupPercent   Float    @default(30)
+  useSupplierRetail       Boolean  @default(true)
+  autoPublish             Boolean  @default(true)
+  deactivateMissing       Boolean  @default(false)
+  overwriteProductContent Boolean  @default(true)
+  overwriteImages         Boolean  @default(true)
+  priceRounding           String   @default("ENDING_99")
+  paymentMode             String   @default("wallet")
+  productsPath            String   @default("/products")
+  ordersPath              String   @default("/orders")
+  orderStatusPathTemplate String   @default("/orders/{id}")
+  pageSize                Int      @default(100)
+  maxImportProducts       Int      @default(500000)
+  supplierMoneyUnit       String   @default("UNCONFIRMED")
+  orderSubmissionEnabled  Boolean  @default(false)
+  orderPayloadStyle       String   @default("CAMEL")
+  importJobStatus         String   @default("IDLE")
+  importJobMode           String?
+  importJobPage           Int      @default(1)
+  importJobCursor         String?
+  importJobProcessed      Int      @default(0)
+  importJobErrors         Int      @default(0)
+  importJobStartedAt      DateTime?
+  importJobUpdatedAt      DateTime?
+  lastSyncAt              DateTime?
+  lastSyncStatus          String?
+  lastSyncMessage         String?
+  syncLeaseUntil          DateTime?
+  syncLeaseOwner          String?
+  supplier                Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  @@index([autoSyncEnabled, syncLeaseUntil])
 }
 
 

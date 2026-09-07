@@ -36,6 +36,7 @@ import { readinessRouter } from './modules/admin/readiness.routes';
 import { commerceRouter, adminCommerceRouter } from './modules/commerce/commerce.routes';
 import { privacyRouter } from './modules/privacy/privacy.routes';
 import { analyticsRouter, adminAnalyticsRouter } from './modules/analytics/analytics.routes';
+import { adminVinyasaRouter, vinyasaIntegrationRouter } from './modules/vinyasa/vinyasa.routes';
 import { prisma } from './lib/prisma';
 import { asyncHandler } from './lib/async-handler';
 
@@ -99,7 +100,7 @@ app.get('/.well-known/apple-developer-merchantid-domain-association', (_req, res
 app.get('/api', (_req, res) => res.json({
   name: 'SANDMAN',
   description: 'Automotive parts marketplace, builds, fitment, dropshipping and seller platform',
-  version: '2.5.2',
+  version: '2.6.1',
   health: '/api/health',
   admin: '/admin',
   storefront: '/',
@@ -196,6 +197,8 @@ app.use('/api/admin/commerce', adminCommerceRouter);
 app.use('/api/privacy', privacyRouter);
 app.use('/api/analytics', analyticsRouter);
 app.use('/api/admin/analytics', adminAnalyticsRouter);
+app.use('/api/admin/vinyasa', adminVinyasaRouter);
+app.use('/api/integrations/vinyasa', vinyasaIntegrationRouter);
 app.use('/api/admin/ops', opsRouter);
 app.use('/api/supplier-feed', supplierFeedRouter);
 app.use('/api/v2', v2Router);

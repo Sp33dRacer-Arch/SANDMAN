@@ -1,0 +1,30 @@
+SANDMAN V2.6.1 VINYASA BACKEND-DIRECT PATCH
+
+Core:
+package.json
+.env.example
+src/app.ts
+src/config/env.ts
+src/server.ts
+src/modules/vinyasa/vinyasa.routes.ts
+src/services/vinyasa-normalizer.ts
+src/services/vinyasa.service.ts
+src/services/vinyasa-scheduler.service.ts
+src/services/supplier-registry.ts
+public/admin/app.js
+public/admin/styles.css
+
+Database:
+prisma/schema.prisma
+prisma/migrations/20260906114500_v26_vinyasa_commerce/migration.sql
+prisma/migrations/20260906160000_v261_vinyasa_hardening/migration.sql
+
+Verification/docs:
+scripts/static-vinyasa-audit.mjs
+VERIFY-V2.6.1-VINYASA.ps1
+CHANGELOG-V2.6.1-VINYASA-FIXES.md
+INSTALL-V2.6.1-VINYASA.txt
+SANDMAN-V2.6.1-STATIC-SCAN-REPORT.txt
+RAILWAY-V2.6-VINYASA-ENV.txt
+
+No .env, Vinyasa dealer API key, or SANDMAN sync key is included.

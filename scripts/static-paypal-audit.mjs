@@ -20,7 +20,7 @@ const pass = m => console.log(`PASS: ${m}`);
 const fail = m => { failed = true; console.error(`FAIL: ${m}`); };
 const check = (condition, message) => condition ? pass(message) : fail(message);
 
-check(pkg.version === '2.5.2' && app.includes("version: '2.5.2'"), 'V2.5.2 runtime/package markers');
+check(pkg.version === '2.6.1' && app.includes("version: '2.6.1'"), 'V2.6.1 runtime/package markers');
 check(env.includes('PAYPAL_WEBHOOK_ID') && env.includes('PAYPAL_BRAND_NAME'), 'PayPal webhook + brand environment configuration');
 check(payments.includes("primaryProvider: 'paypal'"), 'PayPal is the primary payment provider');
 check(orders.includes("paymentProvider: z.enum(['paypal', 'bank_transfer']).default('paypal')"), 'checkout defaults to PayPal without a Stripe customer option');
@@ -43,4 +43,4 @@ check(!store.includes('PAYPAL_CLIENT_SECRET') && !publicAdmin.includes('PAYPAL_C
 check(!migration.match(/DROP\s+TABLE|TRUNCATE|DELETE\s+FROM|DROP\s+COLUMN/i), 'PayPal migration has no obvious destructive SQL');
 
 if (failed) process.exit(1);
-console.log('SANDMAN V2.5.2 PayPal hardening audit passed.');
+console.log('SANDMAN V2.6.1 PayPal hardening audit passed.');

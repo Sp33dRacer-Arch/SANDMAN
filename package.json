@@ -1,8 +1,8 @@
 {
   "name": "sandman-engine-parts-backend",
-  "version": "2.5.2",
+  "version": "2.6.1",
   "private": true,
-  "description": "SANDMAN V2.5.2 PayPal-first checkout with Stripe removed from customer-facing website plus eligibility-gated Google Pay and Apple Pay.",
+  "description": "SANDMAN V2.6.1 Vinyasa commerce hardening: PayPal-first checkout, automated Vinyasa catalogue import, 10%-800% configurable retail pricing, stock sync and supplier fulfillment.",
   "main": "dist/src/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
@@ -18,13 +18,15 @@
     "verify": "npm run verify:ui && npm run prisma:generate && npx prisma validate && npm run typecheck && npm test && npm run build",
     "vehicle:check": "node scripts/vehicle-catalog-check.mjs",
     "vehicle:sync:bmw": "node scripts/sync-vehicle-catalog.mjs --source=curated --only-make=BMW --from=1996 --to=2027",
-    "verify:ui": "node --check public/store/app.js && node --check public/admin/app.js && node scripts/static-v24-audit.mjs && node scripts/static-v25-audit.mjs && node scripts/static-paypal-audit.mjs && node scripts/static-wallet-audit.mjs",
+    "verify:ui": "node --check public/store/app.js && node --check public/admin/app.js && node scripts/static-v24-audit.mjs && node scripts/static-v25-audit.mjs && node scripts/static-paypal-audit.mjs && node scripts/static-wallet-audit.mjs && node scripts/static-vinyasa-audit.mjs",
     "v25:fx-refresh": "node scripts/fx-refresh.mjs",
     "v25:db-growth-alert": "node scripts/db-growth-alert.mjs",
     "v25:analytics-export": "node scripts/analytics-export.mjs",
     "v25:analytics-retention": "node scripts/analytics-retention.mjs",
     "verify:paypal": "node scripts/static-paypal-audit.mjs",
-    "verify:wallets": "node scripts/static-wallet-audit.mjs"
+    "verify:wallets": "node scripts/static-wallet-audit.mjs",
+    "verify:vinyasa": "node scripts/static-vinyasa-audit.mjs",
+    "vinyasa:sync": "node scripts/vinyasa-sync.mjs"
   },
   "dependencies": {
     "@prisma/client": "6.19.0",
@@ -56,5 +58,11 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.0": true,
+    "@prisma/engines@6.19.0": true,
+    "esbuild@0.28.2": true,
+    "prisma@6.19.0": true
   }
 }
