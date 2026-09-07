@@ -110,7 +110,8 @@ const schema = z.object({
   VINYASA_MONEY_UNIT: z.enum(['UNCONFIRMED', 'MAJOR', 'MINOR']).default('UNCONFIRMED'),
   VINYASA_ORDER_SUBMISSION_ENABLED: booleanFromEnv.default(false),
   VINYASA_ORDER_PAYLOAD_STYLE: z.enum(['CAMEL', 'SNAKE']).default('CAMEL'),
-  VINYASA_MAX_IMPORT_PRODUCTS: z.coerce.number().int().min(1).max(1000000).default(500000),
+  VINYASA_IMAGE_REPAIR_BATCH_PRODUCTS: z.coerce.number().int().min(1).max(100).default(20),
+  VINYASA_MAX_IMPORT_PRODUCTS: z.coerce.number().int().min(1).max(5000000).default(500000),
   VINYASA_SYNC_LEASE_MINUTES: z.coerce.number().int().min(5).max(60).default(15),
 
   SUPPLIER_FEED_SECRET: optionalMin24String,

@@ -42,6 +42,8 @@ check(admin.includes('Minimum markup %')&&admin.includes('Maximum markup %')&&ad
 check(admin.includes('Low-cost markup %')&&admin.includes('Mid-cost markup %')&&admin.includes('High-cost markup %'),'adaptive 10%-800% pricing tier controls in admin UI');
 check(admin.includes('vinyasa-price-override'),'per-product pricing override UI');
 check(adminCss.includes('supplier-card-clickable')&&adminCss.includes('vinyasa-callout'),'Vinyasa admin UI styling');
+check(schema.includes('maxImportProducts')&&env.includes('max(5000000)')&&routes.includes('MAX_VINYASA_IMPORT_PRODUCTS')&&admin.includes('max="5000000"'),'catalogue capacity supports a 5M configurable safety ceiling');
+check(service.includes('startVinyasaImageRepairJob')&&service.includes('repairVinyasaMissingImagesBatch')&&service.includes("config.importJobMode === 'IMAGES'")&&routes.includes("'/image-repair-job'")&&admin.includes('Repair missing images'),'rate-limited resumable missing-image repair job');
 check(!admin.includes('VINYASA_API_KEY')&&!admin.includes('SANDMAN_VINYASA_SYNC_API_KEY'),'Vinyasa secrets are not embedded in browser bundle');
 check(schema.includes('supplierMoneyUnit')&&schema.includes('orderSubmissionEnabled')&&schema.includes('importJobStatus'),'V2.6.1 money-unit, order-safety and resumable-job persistence');
 check(env.includes('VINYASA_MONEY_UNIT')&&env.includes('VINYASA_ORDER_SUBMISSION_ENABLED')&&env.includes('VINYASA_SYNC_LEASE_MINUTES'),'V2.6.1 safety environment controls');

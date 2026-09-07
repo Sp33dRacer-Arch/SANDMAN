@@ -9,11 +9,13 @@ import { requireAuth, requireRole } from '../../middleware/auth';
 import { env } from '../../config/env';
 import {
   acquireVinyasaSyncLease,
+  MAX_VINYASA_IMPORT_PRODUCTS,
   ensureVinyasaSupplier,
   previewVinyasaCatalog,
   repriceAllVinyasaProducts,
   releaseVinyasaSyncLease,
   startVinyasaImportJob,
+  startVinyasaImageRepairJob,
   resumeVinyasaImportJob,
   syncVinyasaCatalog,
   syncVinyasaTracking,
@@ -69,7 +71,7 @@ const settingsSchema = z.object({
   ordersPath: relativeApiPath.optional(),
   orderStatusPathTemplate: relativeApiPath.refine(value => value.includes('{id}'), 'Order status path must contain {id}').optional(),
   pageSize: z.number().int().min(1).max(500).optional(),
-  maxImportProducts: z.number().int().min(1).max(1000000).optional(),
+  maxImportProducts: z.number().int().min(1).max(MAX_VINYASA_IMPORT_PRODUCTS).optional(),
 }).superRefine((value, ctx) => {
   const min = value.minMarkupPercent;
   const max = value.maxMarkupPercent;
@@ -96,8 +98,14 @@ adminVinyasaRouter.patch('/settings', requireRole('ADMIN'), asyncHandler(async (
   res.json(updated);
 }));
 
+adminVinyasaRouter.post('/image-repair-job', requireRole('ADMIN'), asyncHandler(async (req, res) => {
+  const body = z.object({ maxProducts: z.number().int().min(1).max(MAX_VINYASA_IMPORT_PRODUCTS).optional() }).parse(req.body ?? {});
+  const result = await startVinyasaImageRepairJob(body.maxProducts);
+  res.status(202).json(result);
+}));
+
 adminVinyasaRouter.post('/import-job', requireRole('ADMIN'), asyncHandler(async (req, res) => {
-  const body = z.object({ maxProducts: z.number().int().min(1).max(1000000).optional() }).parse(req.body ?? {});
+  const body = z.object({ maxProducts: z.number().int().min(1).max(MAX_VINYASA_IMPORT_PRODUCTS).optional() }).parse(req.body ?? {});
   const result = await startVinyasaImportJob(body.maxProducts);
   res.status(202).json(result);
 }));
@@ -111,7 +119,7 @@ adminVinyasaRouter.post('/sync', requireRole('ADMIN'), asyncHandler(async (req, 
   const body = z.object({
     dryRun: z.boolean().default(false),
     mode: z.enum(['FULL', 'STOCK_PRICE']).default('FULL'),
-    maxProducts: z.number().int().min(1).max(1000000).optional(),
+    maxProducts: z.number().int().min(1).max(MAX_VINYASA_IMPORT_PRODUCTS).optional(),
   }).parse(req.body ?? {});
   const owner = await acquireVinyasaSyncLease();
   if (!owner) throw new HttpError(409, 'A Vinyasa sync is already running');
@@ -158,7 +166,7 @@ vinyasaIntegrationRouter.post('/sync', asyncHandler(async (req, res) => {
   const auth = req.header('authorization');
   const key = auth?.startsWith('Bearer ') ? auth.slice(7) : req.header('x-sandman-vinyasa-key');
   if (!validSyncKey(key)) throw new HttpError(401, 'Invalid SANDMAN Vinyasa sync API key');
-  const body = z.object({ mode: z.enum(['FULL', 'STOCK_PRICE', 'TRACKING', 'ALL']).default('STOCK_PRICE'), maxProducts: z.number().int().min(1).max(1000000).optional() }).parse(req.body ?? {});
+  const body = z.object({ mode: z.enum(['FULL', 'STOCK_PRICE', 'TRACKING', 'ALL']).default('STOCK_PRICE'), maxProducts: z.number().int().min(1).max(MAX_VINYASA_IMPORT_PRODUCTS).optional() }).parse(req.body ?? {});
   const owner = await acquireVinyasaSyncLease();
   if (!owner) return res.status(202).json({ skipped: true, reason: 'A Vinyasa sync is already running' });
   try {

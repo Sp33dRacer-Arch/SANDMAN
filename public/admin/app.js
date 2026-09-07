@@ -894,6 +894,7 @@
           <button class="btn" type="button" data-action="vinyasa-stock-sync">Sync stock + prices</button>
           <button class="btn" type="button" data-action="vinyasa-tracking-sync">Sync tracking</button>
           <button class="btn" type="button" data-action="vinyasa-reprice">Reprice catalogue</button>
+          <button class="btn" type="button" data-action="vinyasa-repair-images">Repair missing images</button>
         </div></div>
         <div id="vinyasa-feed-preview"></div>
         <form id="vinyasa-settings-form" class="data-panel vinyasa-settings" style="margin-top:18px">
@@ -911,7 +912,7 @@
             <label class="field"><span>Sync interval (minutes)</span><input name="syncIntervalMinutes" type="number" min="5" max="1440" value="${esc(c.syncIntervalMinutes)}" /></label>
             <label class="field"><span>Supplier payment</span><select name="paymentMode"><option value="wallet" ${c.paymentMode==='wallet'?'selected':''}>Vinyasa wallet</option><option value="card_on_file" ${c.paymentMode==='card_on_file'?'selected':''}>Card on file</option><option value="manual" ${c.paymentMode==='manual'?'selected':''}>Manual payment</option></select></label>
             <label class="field"><span>Page size</span><input name="pageSize" type="number" min="1" max="500" value="${esc(c.pageSize)}" /></label>
-            <label class="field"><span>Import safety limit</span><input name="maxImportProducts" type="number" min="1" max="1000000" value="${esc(c.maxImportProducts)}" /></label>
+            <label class="field"><span>Import safety limit</span><input name="maxImportProducts" type="number" min="1" max="5000000" value="${esc(c.maxImportProducts)}" /><small>Up to 5,000,000 products; imports remain paged/backgrounded.</small></label>
             <label class="field"><span>Supplier price units</span><select name="supplierMoneyUnit"><option value="UNCONFIRMED" ${c.supplierMoneyUnit==='UNCONFIRMED'?'selected':''}>Unconfirmed — block import</option><option value="MAJOR" ${c.supplierMoneyUnit==='MAJOR'?'selected':''}>Major units (75.50 = $75.50)</option><option value="MINOR" ${c.supplierMoneyUnit==='MINOR'?'selected':''}>Minor units (7550 = $75.50)</option></select></label>
             <label class="field"><span>Order payload style</span><select name="orderPayloadStyle"><option value="CAMEL" ${c.orderPayloadStyle==='CAMEL'?'selected':''}>camelCase</option><option value="SNAKE" ${c.orderPayloadStyle==='SNAKE'?'selected':''}>snake_case</option></select></label>
             <label class="field span-2"><span>Products API path</span><input name="productsPath" value="${esc(c.productsPath)}" /></label>
@@ -1186,6 +1187,13 @@
           actionEl.disabled = true;
           const result = await api('/api/admin/vinyasa/reprice',{method:'POST'});
           toast('Vinyasa catalogue repriced', `${result.updated} prices changed.`);
+          await openVinyasaModal();
+        }
+      }
+      else if (action === 'vinyasa-repair-images') {
+        if (confirm('Repair active Vinyasa products that currently have no image? SANDMAN will use saved feed images first, then the Vinyasa product-detail API only when needed.')) {
+          const result = await api('/api/admin/vinyasa/image-repair-job',{method:'POST',body:JSON.stringify({})});
+          toast('Vinyasa image repair started', result.started === false ? 'Existing job: ' + result.status : 'Missing-image products will be checked in rate-limited background batches.');
           await openVinyasaModal();
         }
       }

@@ -26,6 +26,8 @@ const DEFAULT_ORDERS_PATH = '/orders';
 const DEFAULT_ORDER_STATUS_PATH = '/orders/{id}';
 const REQUEST_TIMEOUT_MS = 20_000;
 const MAX_PREVIEW = 100;
+export const MAX_VINYASA_IMPORT_PRODUCTS = 5_000_000;
+const IMAGE_REPAIR_REQUEST_DELAY_MS = 550;
 
 const cleanPath = (value: string) => `/${value.trim().replace(/^\/+/, '')}`;
 const baseUrl = () => (env.VINYASA_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, '');
@@ -208,7 +210,7 @@ export async function testVinyasaConnection() {
 
 async function fetchCatalogPage(path: string, page: number, pageSize: number, cursor?: string) {
   const query: Record<string, string | number | undefined> = { limit: pageSize, page };
-  if (cursor) query.cursor = cursor;
+  if (cursor) query.after = cursor;
   const payload = await requestVinyasa(path, { method: 'GET' }, query);
   return { payload, items: extractVinyasaItems(payload), next: extractVinyasaNext(payload) };
 }
@@ -448,6 +450,111 @@ async function importOne(row: VinyasaNormalizedProduct, supplier: Supplier, conf
   return { product, link, decision, fitmentsImported };
 }
 
+async function replaceVinyasaProductImages(productId: string, name: string, urls: string[]) {
+  const unique = [...new Set(urls.filter(url => /^https:\/\//i.test(url)))].slice(0, 12);
+  if (!unique.length) return 0;
+  await prisma.$transaction(async tx => {
+    await tx.productImage.deleteMany({ where: { productId } });
+    await tx.productImage.createMany({
+      data: unique.map((url, position) => ({ productId, url, position, alt: name + (position ? ' image ' + (position + 1) : '') })),
+    });
+  });
+  return unique.length;
+}
+
+const waitForVinyasaImageRepair = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchVinyasaProductDetailForImageRepair(supplierProductId: string) {
+  return requestVinyasa('/products/' + encodeURIComponent(supplierProductId), { method: 'GET' });
+}
+
+export async function repairVinyasaMissingImagesBatch(input: { limit?: number; afterId?: string } = {}) {
+  const { supplier, config } = await ensureVinyasaSupplier();
+  if (!vinyasaConfigured()) throw new HttpError(503, 'Set VINYASA_API_KEY before repairing Vinyasa images.');
+  if (!config.overwriteImages) throw new HttpError(409, 'Enable “Keep product images synced from Vinyasa” before running image repair.');
+  if (!['MAJOR', 'MINOR'].includes(config.supplierMoneyUnit)) throw new HttpError(409, 'Confirm Vinyasa supplier money units before repairing product images.');
+  const moneyUnit = config.supplierMoneyUnit === 'MINOR' ? 'MINOR' : 'MAJOR';
+  const take = Math.min(100, Math.max(1, Math.round(input.limit ?? env.VINYASA_IMAGE_REPAIR_BATCH_PRODUCTS)));
+  const links = await prisma.supplierProduct.findMany({
+    where: {
+      supplierId: supplier.id,
+      ...(input.afterId ? { id: { gt: input.afterId } } : {}),
+      product: { status: 'ACTIVE', images: { none: {} } },
+    },
+    include: { product: { select: { id: true, name: true } } },
+    orderBy: { id: 'asc' },
+    take,
+  });
+
+  let repaired = 0;
+  let noSupplierImage = 0;
+  let errors = 0;
+  let detailRequests = 0;
+  const samples: Array<{ sku: string; status: string; imageCount?: number; error?: string }> = [];
+
+  for (const link of links) {
+    try {
+      let normalized = normalizeVinyasaProduct(link.rawData, moneyUnit);
+      let images = normalized?.images ?? [];
+      if (!images.length) {
+        detailRequests += 1;
+        try {
+          const detail = await fetchVinyasaProductDetailForImageRepair(link.supplierProductId);
+          normalized = normalizeVinyasaProduct(detail, moneyUnit);
+          images = normalized?.images ?? [];
+        } finally {
+          await waitForVinyasaImageRepair(IMAGE_REPAIR_REQUEST_DELAY_MS);
+        }
+      }
+      if (!images.length) {
+        noSupplierImage += 1;
+        if (samples.length < 20) samples.push({ sku: link.supplierSku ?? link.product.name, status: 'NO_SUPPLIER_IMAGE' });
+        continue;
+      }
+      const imageCount = await replaceVinyasaProductImages(link.productId, link.product.name, images);
+      repaired += 1;
+      if (samples.length < 20) samples.push({ sku: link.supplierSku ?? link.product.name, status: 'REPAIRED', imageCount });
+    } catch (error) {
+      errors += 1;
+      if (samples.length < 20) samples.push({ sku: link.supplierSku ?? link.product.name, status: 'ERROR', error: error instanceof Error ? error.message.slice(0, 300) : 'Unknown repair error' });
+    }
+  }
+
+  return {
+    scanned: links.length,
+    repaired,
+    noSupplierImage,
+    errors,
+    detailRequests,
+    nextCursor: links.at(-1)?.id ?? input.afterId ?? null,
+    completed: links.length < take,
+    samples,
+  };
+}
+
+export async function startVinyasaImageRepairJob(maxProducts?: number) {
+  const { supplier, config } = await ensureVinyasaSupplier();
+  if (!vinyasaConfigured()) throw new HttpError(503, 'Set VINYASA_API_KEY before starting Vinyasa image repair.');
+  if (!config.overwriteImages) throw new HttpError(409, 'Enable “Keep product images synced from Vinyasa” before running image repair.');
+  if (config.importJobStatus === 'RUNNING') return { started: false, status: config.importJobStatus, processed: config.importJobProcessed };
+  const ceiling = Math.min(MAX_VINYASA_IMPORT_PRODUCTS, Math.max(1, Math.round(maxProducts ?? MAX_VINYASA_IMPORT_PRODUCTS)));
+  const startedAt = new Date();
+  await prisma.supplierIntegrationConfig.update({ where: { supplierId: supplier.id }, data: {
+    maxImportProducts: ceiling,
+    importJobStatus: 'RUNNING',
+    importJobMode: 'IMAGES',
+    importJobPage: 1,
+    importJobCursor: null,
+    importJobProcessed: 0,
+    importJobErrors: 0,
+    importJobStartedAt: startedAt,
+    importJobUpdatedAt: startedAt,
+    lastSyncMessage: 'Queued missing-image repair for active Vinyasa products',
+  } });
+  setImmediate(() => void resumeVinyasaImportJob().catch(error => console.error('Vinyasa background image repair failed', error)));
+  return { started: true, status: 'RUNNING', mode: 'IMAGES', maxProducts: ceiling };
+}
+
 export async function previewVinyasaCatalog(limit = 20) {
   const { config } = await ensureVinyasaSupplier();
   const size = Math.min(MAX_PREVIEW, Math.max(1, Math.round(limit)));
@@ -637,7 +744,7 @@ export async function startVinyasaImportJob(maxProducts?: number) {
   if (!vinyasaConfigured()) throw new HttpError(503, 'Set VINYASA_API_KEY before starting the Vinyasa catalogue import.');
   if (!['MAJOR', 'MINOR'].includes(config.supplierMoneyUnit)) throw new HttpError(409, 'Confirm Vinyasa supplier money units before importing products.');
   if (config.importJobStatus === 'RUNNING') return { started: false, status: config.importJobStatus, processed: config.importJobProcessed };
-  const ceiling = Math.min(1_000_000, Math.max(1, Math.round(maxProducts ?? config.maxImportProducts)));
+  const ceiling = Math.min(MAX_VINYASA_IMPORT_PRODUCTS, Math.max(1, Math.round(maxProducts ?? config.maxImportProducts)));
   const startedAt = new Date();
   await prisma.supplierIntegrationConfig.update({ where: { supplierId: supplier.id }, data: {
     maxImportProducts: ceiling,
@@ -667,6 +774,32 @@ export async function resumeVinyasaImportJob() {
   if (!owner) return { resumed: false, reason: 'A Vinyasa sync lease is already active.' };
   backgroundImportRunning = true;
   try {
+    if (config.importJobMode === 'IMAGES') {
+      const batchSize = Math.min(env.VINYASA_IMAGE_REPAIR_BATCH_PRODUCTS, remaining);
+      const result = await repairVinyasaMissingImagesBatch({ limit: batchSize, afterId: config.importJobCursor ?? undefined });
+      const processed = config.importJobProcessed + result.scanned;
+      const errors = config.importJobErrors + result.errors;
+      const finished = result.completed || processed >= config.maxImportProducts;
+      const status = result.completed ? (errors ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED') : finished ? 'LIMIT_REACHED' : 'RUNNING';
+      const message = result.completed
+        ? 'Image repair complete: ' + result.repaired + ' repaired in the final batch; ' + result.noSupplierImage + ' had no supplier image; ' + errors + ' total errors.'
+        : status === 'LIMIT_REACHED'
+          ? 'Image repair stopped at configured safety limit after ' + processed + ' missing-image products.'
+          : 'Image repair running: ' + processed + ' missing-image products checked; last batch repaired ' + result.repaired + '.';
+      await prisma.supplierIntegrationConfig.update({ where: { supplierId: supplier.id }, data: {
+        importJobStatus: status,
+        importJobCursor: result.nextCursor,
+        importJobProcessed: processed,
+        importJobErrors: errors,
+        importJobUpdatedAt: new Date(),
+        lastSyncMessage: message,
+      } });
+      if (status === 'RUNNING') {
+        setTimeout(() => void resumeVinyasaImportJob().catch(error => console.error('Vinyasa background image repair continuation failed', error)), 1000);
+      }
+      return { resumed: true, status, result };
+    }
+
     const result = await syncVinyasaCatalog({
       mode: 'FULL',
       maxProducts: remaining,

@@ -40,9 +40,9 @@
       <a href="/feed">Following</a>
     </nav>
     <div class="header-actions">
-      <label class="currency-control" title="Display currency"><span>Currency</span><select id="currencySelector" aria-label="Display currency"><option>USD</option></select></label>
-      <label class="language-control" title="Language"><span>Language</span><select id="languageSelector" aria-label="Language"><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option><option value="de">DE</option></select></label>
-      <button class="icon-btn" id="searchToggle" aria-label="Search" title="Search">
+      <label class="currency-control" title="Display currency"><span>Currency</span><select id="currencySelector" data-currency-selector aria-label="Display currency"><option>USD</option></select></label>
+      <label class="language-control" title="Language"><span>Language</span><select id="languageSelector" data-language-selector aria-label="Language"><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option><option value="de">DE</option></select></label>
+      <button class="icon-btn" id="searchToggle" aria-label="Search" aria-expanded="false" aria-controls="searchPanel" title="Search">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 5 5"></path></svg>
       </button>
       <button class="icon-btn theme-toggle" data-theme-toggle aria-label="Switch to dark mode" title="Switch to dark mode">
@@ -55,7 +55,7 @@
       <button class="cart-btn" id="cartButton" aria-label="Open cart">
         <span>Bag</span><span class="cart-count" id="cartCount">0</span>
       </button>
-      <button class="mobile-menu-btn" id="mobileMenuButton" aria-label="Open menu"><span></span><span></span></button>
+      <button class="mobile-menu-btn" id="mobileMenuButton" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu"><span></span><span></span></button>
     </div>
   </header>
 
@@ -76,6 +76,7 @@
       <div class="mobile-menu-group"><span class="mobile-menu-label">BUILD</span><a href="/build-advisor">Build advisor</a><a href="/builds">My builds</a></div>
       <div class="mobile-menu-group"><span class="mobile-menu-label">SOCIAL</span><a href="/feed">Following feed</a><a href="/notifications">Notifications</a></div>
       <div class="mobile-menu-group"><span class="mobile-menu-label">ACCOUNT</span><a href="/account">My profile</a><a href="/account?tab=purchases">Purchases</a><a href="/account?tab=sales">Sales</a><a href="/messages">Messages</a><a href="/sell">Sell a part</a><a href="/seller">Seller studio</a><a href="/admin">Admin</a></div>
+      <div class="mobile-menu-group mobile-localization"><span class="mobile-menu-label">REGION & LANGUAGE</span><div class="mobile-localization-grid"><label><span>Currency</span><select id="mobileCurrencySelector" data-currency-selector aria-label="Mobile display currency"><option>USD</option></select></label><label><span>Language</span><select id="mobileLanguageSelector" data-language-selector aria-label="Mobile language"><option value="en">EN</option><option value="es">ES</option><option value="fr">FR</option><option value="de">DE</option></select></label></div></div>
       <button class="mobile-theme-toggle" data-theme-toggle type="button"><span class="theme-icon" aria-hidden="true">☾</span><span class="theme-label">Dark mode</span></button>
     </nav>
   </aside>

@@ -1,0 +1,33 @@
+SANDMAN V2.6.1 — STOREFRONT UX + VINYASA 5M / IMAGE REPAIR
+STATIC / SOURCE SCAN REPORT
+Date: 2026-09-07
+
+RESULT: PASS at source/static level.
+
+Validated against two reconstructed V2.6.1 source variants:
+1) the reconstructed V2.6.1 tree used for the prior storefront audit;
+2) a compatibility variant with the user's live-style VINYASA_ORDER_PAYLOAD_STYLE naming and the available_qty stock fix already present.
+
+PASS:
+- storefront JS syntax
+- admin JS syntax after patch application
+- patcher JS syntax
+- storefront UX audit: 18/18
+- updated Vinyasa static audit
+- 5,000,000 configurable hard ceiling markers
+- page size remains bounded separately
+- existing available_qty stock mapping is preserved/idempotent
+- documented `after` cursor pagination marker
+- resumable missing-image repair service + admin route + admin action
+- image detail requests are rate-limited
+- no new database migration required
+- no .env or secret file in the patch
+- patcher preserves unrelated env variable naming rather than overwriting src/config/env.ts wholesale
+- TypeScript parse smoke check found no syntax-class diagnostics in changed TS files (dependency modules were not installed in this sandbox)
+
+IMPORTANT:
+Run APPLY-STOREFRONT-UX-VINYASA-5M.ps1 inside the user's real SANDMAN-backend.
+It automatically runs the full existing VERIFY-V2.6.1-VINYASA.ps1 when present.
+Do not deploy if the local verifier fails.
+
+A 5,000,000-product ceiling means the software will allow that many products; actual import duration/database size depends on Railway/Postgres resources and the number of products Vinyasa actually exposes.
