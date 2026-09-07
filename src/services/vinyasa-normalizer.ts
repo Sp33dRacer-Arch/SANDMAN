@@ -272,11 +272,35 @@ export function normalizeVinyasaProduct(input: unknown, moneyUnit: 'MAJOR' | 'MI
     ?? (pricing ? pick(pricing, ['recommendedRetailPrice', 'recommended_retail_price', 'retailPrice', 'retail_price', 'msrp', 'rrp', 'listPrice', 'list_price', 'mapPrice', 'map_price']) : undefined), moneyUnit);
   const shippingCents = centsFromMoney(pick(raw, ['shippingPrice', 'shipping_price', 'shippingCost', 'shipping_cost'])
     ?? (shippingRecord ? pick(shippingRecord, ['price', 'cost', 'shippingPrice', 'shipping_price', 'shippingCost', 'shipping_cost']) : undefined), moneyUnit) ?? 0;
-  const stockRaw = pick(raw, ['stock', 'quantity', 'qty', 'stockQuantity', 'stock_quantity'])
-    ?? (inventoryRecord ? pick(inventoryRecord, ['stock', 'quantity', 'qty', 'available', 'availableStock', 'available_stock']) : inventoryValue);
-  const parsedStock = intFrom(stockRaw);
-  const stockKnown = parsedStock !== undefined;
-  const stock = parsedStock ?? 0;
+  const stockRaw = pick(raw, [
+  'stock',
+  'quantity',
+  'qty',
+  'availableQty',
+  'available_qty',
+  'stockQuantity',
+  'stock_quantity',
+])
+  ?? (inventoryRecord
+    ? pick(inventoryRecord, [
+        'stock',
+        'quantity',
+        'qty',
+        'available',
+        'availableQty',
+        'available_qty',
+        'availableStock',
+        'available_stock',
+      ])
+    : inventoryValue);
+
+const parsedStock = intFrom(stockRaw);
+
+const inStockRaw = pick(raw, ['inStock', 'in_stock']);
+const explicitlyOutOfStock = inStockRaw === false;
+
+const stockKnown = parsedStock !== undefined || explicitlyOutOfStock;
+const stock = parsedStock ?? 0;
   const images = flattenImageUrls(pick(raw, ['images', 'imageUrls', 'image_urls', 'gallery', 'image', 'imageUrl', 'image_url'])
     ?? (mediaRecord ? pick(mediaRecord, ['images', 'gallery', 'assets']) : undefined));
   const isUniversal = boolFrom(pick(raw, ['isUniversal', 'is_universal', 'universal']), false);
