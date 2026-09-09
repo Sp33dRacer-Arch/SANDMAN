@@ -236,6 +236,128 @@ app.get('/sitemaps/products-:page.xml', asyncHandler(async (req, res) => {
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
 }));
+// Google Merchant Center product feed
+app.get('/google-products.xml', asyncHandler(async (_req, res) => {
+  const base = env.APP_URL.replace(/\/$/, '');
+
+  const products = await prisma.product.findMany({
+    where: {
+      status: 'ACTIVE',
+    },
+    select: {
+      sku: true,
+      slug: true,
+      name: true,
+      brand: true,
+      manufacturerPn: true,
+      description: true,
+      priceCents: true,
+      currency: true,
+      condition: true,
+      sourceType: true,
+      stockQuantity: true,
+      images: {
+        orderBy: { position: 'asc' },
+        take: 1,
+        select: {
+          url: true,
+        },
+      },
+      supplierLinks: {
+        where: {
+          active: true,
+        },
+        select: {
+          availableStock: true,
+        },
+      },
+    },
+    orderBy: {
+      updatedAt: 'desc',
+    },
+  });
+
+  const absoluteUrl = (value: string) => {
+    if (/^https?:\/\//i.test(value)) return value;
+    return `${base}${value.startsWith('/') ? '' : '/'}${value}`;
+  };
+
+  const cleanText = (value: string) =>
+    value
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const items = products
+    .filter(product =>
+      product.images.length > 0 &&
+      product.priceCents > 0
+    )
+    .map(product => {
+      const inStock =
+        product.sourceType === 'MARKETPLACE'
+          ? (product.stockQuantity ?? 0) > 0
+          : product.supplierLinks.some(
+              link =>
+                link.availableStock === null ||
+                link.availableStock > 0
+            );
+
+      const condition =
+        product.condition === 'REMANUFACTURED'
+          ? 'refurbished'
+          : product.condition === 'NEW'
+            ? 'new'
+            : 'used';
+
+      const title = cleanText(product.name).slice(0, 150);
+      const description = cleanText(product.description).slice(0, 5000);
+
+      const link =
+        `${base}/products/${encodeURIComponent(product.slug)}`;
+
+      const imageLink = absoluteUrl(product.images[0]!.url);
+
+      const identifiers = [
+        product.brand
+          ? `<g:brand>${htmlEsc(product.brand)}</g:brand>`
+          : '',
+        product.manufacturerPn
+          ? `<g:mpn>${htmlEsc(product.manufacturerPn)}</g:mpn>`
+          : '',
+        !product.brand && !product.manufacturerPn
+          ? '<g:identifier_exists>false</g:identifier_exists>'
+          : '',
+      ].join('');
+
+      return `
+<item>
+  <g:id>${htmlEsc(product.sku)}</g:id>
+  <g:title>${htmlEsc(title)}</g:title>
+  <g:description>${htmlEsc(description)}</g:description>
+  <g:link>${htmlEsc(link)}</g:link>
+  <g:image_link>${htmlEsc(imageLink)}</g:image_link>
+  <g:availability>${inStock ? 'in_stock' : 'out_of_stock'}</g:availability>
+  <g:price>${(product.priceCents / 100).toFixed(2)} ${htmlEsc(product.currency.toUpperCase())}</g:price>
+  <g:condition>${condition}</g:condition>
+  ${identifiers}
+</item>`;
+    })
+    .join('');
+
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:g="http://base.google.com/ns/1.0" version="2.0">
+  <channel>
+    <title>SANDMAN Product Feed</title>
+    <link>${htmlEsc(base)}</link>
+    <description>SANDMAN automotive parts product feed</description>
+    ${items}
+  </channel>
+</rss>`;
+
+  res.setHeader('Cache-Control', 'public, max-age=900');
+  res.type('application/xml').send(xml);
+}));
 
 app.use('/api/health', healthRouter);
 app.use('/api/auth', authRouter);
