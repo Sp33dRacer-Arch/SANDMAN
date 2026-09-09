@@ -31,7 +31,7 @@ export type VinyasaNormalizedProduct = {
   specs?: Record<string, unknown>;
   videoUrl?: string;
   images: string[];
-  fitments: Array<{ vehicleVariantId?: string; engineCode?: string; yearStart?: number; yearEnd?: number }>;
+  fitments: Array<{ vehicleVariantId?: string; make?: string; model?: string; engineCode?: string; engineName?: string; yearStart?: number; yearEnd?: number; applicationText?: string }>;
   raw: Record<string, unknown>;
 };
 
@@ -172,18 +172,107 @@ function flattenImageUrls(value: unknown): string[] {
   return [...new Set(out)].slice(0, 12);
 }
 
-function normalizeFitments(value: unknown) {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap(entry => {
-    const record = asRecord(entry);
-    if (!record) return [];
+function scalarList(value: unknown): string[] {
+  const source = Array.isArray(value) ? value : value == null || value === '' ? [] : [value];
+  return [...new Set(source.map(asString).filter(Boolean))].slice(0, 80);
+}
+
+function yearBoundsFrom(value: unknown): { yearStart?: number; yearEnd?: number } {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 1886 && value <= 2200) return { yearStart: value, yearEnd: value };
+  const text = asString(value);
+  const range = text.match(/\b((?:19|20)\d{2})\s*(?:-|–|—|to)\s*((?:19|20)\d{2})\b/i);
+  if (range) {
+    const first = Number(range[1]);
+    const second = Number(range[2]);
+    return { yearStart: Math.min(first, second), yearEnd: Math.max(first, second) };
+  }
+  const single = text.match(/\b((?:19|20)\d{2})\b/);
+  if (single) {
+    const year = Number(single[1]);
+    return { yearStart: year, yearEnd: year };
+  }
+  return {};
+}
+
+function normalizeFitments(value: unknown, applicationsValue?: unknown) {
+  type Row = VinyasaNormalizedProduct['fitments'][number];
+  const out: Row[] = [];
+  const push = (row: Row | null | undefined) => {
+    if (!row || out.length >= 250) return;
+    const useful = row.vehicleVariantId || row.engineCode || row.engineName || (row.make && row.model) || row.applicationText;
+    if (!useful) return;
+    out.push(row);
+  };
+  const fromRecord = (record: Record<string, unknown>) => {
     const vehicleVariantId = asString(pick(record, ['vehicleVariantId', 'vehicle_variant_id'])) || undefined;
-    const engineCode = asString(pick(record, ['engineCode', 'engine_code', 'engine'])) || undefined;
-    const yearStart = intFrom(pick(record, ['yearStart', 'year_start', 'fromYear', 'from_year']));
-    const yearEnd = intFrom(pick(record, ['yearEnd', 'year_end', 'toYear', 'to_year']));
-    if (!vehicleVariantId && !engineCode) return [];
-    return [{ vehicleVariantId, engineCode, yearStart, yearEnd }];
-  }).slice(0, 250);
+    const make = asString(pick(record, ['make', 'vehicleMake', 'vehicle_make'])) || undefined;
+    const model = asString(pick(record, ['model', 'vehicleModel', 'vehicle_model'])) || undefined;
+    const engineCode = asString(pick(record, ['engineCode', 'engine_code'])) || undefined;
+    const engineName = asString(pick(record, ['engineName', 'engine_name', 'engine'])) || undefined;
+    const explicitStart = intFrom(pick(record, ['yearStart', 'year_start', 'fromYear', 'from_year']));
+    const explicitEnd = intFrom(pick(record, ['yearEnd', 'year_end', 'toYear', 'to_year']));
+    const year = yearBoundsFrom(pick(record, ['year', 'years', 'modelYear', 'model_year']));
+    push({ vehicleVariantId, make, model, engineCode, engineName, yearStart: explicitStart ?? year.yearStart, yearEnd: explicitEnd ?? year.yearEnd });
+  };
+  const fromAxisObject = (record: Record<string, unknown>) => {
+    const vehicleVariantId = asString(pick(record, ['vehicleVariantId', 'vehicle_variant_id'])) || undefined;
+    if (vehicleVariantId) { fromRecord(record); return; }
+    const makes = scalarList(pick(record, ['make', 'makes', 'vehicleMake', 'vehicle_make']));
+    const models = scalarList(pick(record, ['model', 'models', 'vehicleModel', 'vehicle_model']));
+    const engineCodes = scalarList(pick(record, ['engineCode', 'engine_code']));
+    const engineNames = scalarList(pick(record, ['engine', 'engines', 'engineName', 'engine_name']));
+    const yearValues = scalarList(pick(record, ['year', 'years', 'modelYear', 'model_year']));
+    const explicitStart = intFrom(pick(record, ['yearStart', 'year_start', 'fromYear', 'from_year']));
+    const explicitEnd = intFrom(pick(record, ['yearEnd', 'year_end', 'toYear', 'to_year']));
+    const years = yearValues.length ? yearValues.map(yearBoundsFrom) : [{ yearStart: explicitStart, yearEnd: explicitEnd }];
+    let pairs: Array<{ make?: string; model?: string }> = [];
+    if (makes.length && models.length) {
+      if (makes.length === 1) pairs = models.map(model => ({ make: makes[0], model }));
+      else if (models.length === 1) pairs = makes.map(make => ({ make, model: models[0] }));
+      else if (makes.length === models.length) pairs = makes.map((make, index) => ({ make, model: models[index] }));
+      else if (makes.length * models.length <= 16) pairs = makes.flatMap(make => models.map(model => ({ make, model })));
+    } else if (makes.length || models.length) {
+      pairs = (makes.length ? makes : models).map(value => makes.length ? { make: value } : { model: value });
+    } else {
+      pairs = [{}];
+    }
+    const engines: Array<{ engineCode?: string; engineName?: string }> = engineCodes.length
+      ? engineCodes.map(engineCode => ({ engineCode }))
+      : engineNames.length ? engineNames.map(engineName => ({ engineName })) : [{}];
+    fitmentExpansion:
+    for (const pair of pairs) {
+      for (const year of years) {
+        for (const engine of engines) {
+          push({ ...pair, ...engine, ...year });
+          if (out.length >= 250) break fitmentExpansion;
+        }
+      }
+    }
+  };
+
+  if (Array.isArray(value)) {
+    for (const entry of value.slice(0, 250)) {
+      if (typeof entry === 'string') push({ applicationText: entry.trim() || undefined, ...yearBoundsFrom(entry) });
+      else { const record = asRecord(entry); if (record) fromAxisObject(record); }
+      if (out.length >= 250) break;
+    }
+  } else {
+    const record = asRecord(value);
+    if (record) fromAxisObject(record);
+  }
+  if (Array.isArray(applicationsValue)) {
+    for (const entry of applicationsValue.slice(0, 80)) {
+      if (typeof entry === 'string') push({ applicationText: entry.trim() || undefined, ...yearBoundsFrom(entry) });
+      else { const record = asRecord(entry); if (record) fromRecord(record); }
+      if (out.length >= 250) break;
+    }
+  }
+  const deduped = new Map<string, Row>();
+  for (const row of out) {
+    const key = JSON.stringify([row.vehicleVariantId, row.make, row.model, row.engineCode, row.engineName, row.yearStart, row.yearEnd, row.applicationText]);
+    if (!deduped.has(key)) deduped.set(key, row);
+  }
+  return [...deduped.values()].slice(0, 250);
 }
 
 export function extractVinyasaItems(payload: unknown): unknown[] {
@@ -231,7 +320,7 @@ export function extractVinyasaNext(payload: unknown): { nextCursor?: string; nex
   if (nextLink) {
     try {
       const url = new URL(nextLink, 'https://vinyasa.invalid');
-      resolvedCursor = resolvedCursor || url.searchParams.get('cursor') || url.searchParams.get('page_cursor') || undefined;
+      resolvedCursor = resolvedCursor || url.searchParams.get('after') || url.searchParams.get('cursor') || url.searchParams.get('page_cursor') || undefined;
       resolvedPage = resolvedPage ?? intFrom(url.searchParams.get('page'));
       hasMore = true;
     } catch { /* Ignore malformed pagination links; page fallback still works. */ }
@@ -310,7 +399,7 @@ const stock = parsedStock ?? 0;
   const weightValue = pick(raw, ['weightGrams', 'weight_grams']) ?? (dimensions ? pick(dimensions, ['weightGrams', 'weight_grams']) : undefined);
   let weightGrams = intFrom(weightValue);
   if (weightGrams === undefined) {
-    const pounds = asNumber(pick(raw, ['weightLb', 'weight_lb', 'weightLbs', 'weight_lbs']));
+    const pounds = asNumber(pick(raw, ['weight', 'weightLb', 'weight_lb', 'weightLbs', 'weight_lbs']));
     if (pounds !== undefined) weightGrams = Math.round(pounds * 453.59237);
   }
 
@@ -351,7 +440,7 @@ const stock = parsedStock ?? 0;
     specs: normalizeSpecs(pick(raw, ['specifications', 'specs', 'attributes', 'features', 'technicalData', 'technical_data'])),
     videoUrl: (() => { const value = asString(pick(raw, ['videoUrl', 'video_url', 'video'])); return /^https:\/\//i.test(value) ? value : undefined; })(),
     images,
-    fitments: normalizeFitments(pick(raw, ['fitments', 'applications', 'vehicles', 'compatibility'])),
+    fitments: normalizeFitments(pick(raw, ['fitment', 'fitments', 'vehicles', 'compatibility']), pick(raw, ['applications'])),
     raw: outer,
   };
 }

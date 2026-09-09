@@ -39,6 +39,7 @@ import { analyticsRouter, adminAnalyticsRouter } from './modules/analytics/analy
 import { adminVinyasaRouter, vinyasaIntegrationRouter } from './modules/vinyasa/vinyasa.routes';
 import { prisma } from './lib/prisma';
 import { asyncHandler } from './lib/async-handler';
+import { buildProductSeo, safeJsonLd, websiteStructuredData } from './services/storefront-seo.service';
 
 export const app = express();
 
@@ -114,59 +115,126 @@ const htmlEsc = (value: string) => value.replace(/[&<>\"']/g, char => {
   if (char === '\"') return '&quot;';
   return '&#39;';
 });
-function storefrontHtml(meta?: { title?: string; description?: string; canonical?: string; image?: string | null }) {
+type StorefrontMeta = {
+  title?: string;
+  description?: string;
+  canonical?: string;
+  image?: string | null;
+  imageAlt?: string;
+  type?: 'website' | 'product';
+  robots?: string;
+  productPrice?: string;
+  productCurrency?: string;
+  availability?: 'in stock' | 'out of stock';
+  jsonLd?: unknown[];
+};
+function storefrontHtml(meta?: StorefrontMeta) {
+  const base = env.APP_URL.replace(/\/$/, '');
   const title = meta?.title ?? 'SANDMAN — Automotive Parts Marketplace';
   const description = meta?.description ?? 'Find automotive parts by vehicle, engine code, OEM number or SKU. Verified fitment, supplier stock, marketplace sellers and builds.';
-  const canonical = meta?.canonical ?? `${env.APP_URL.replace(/\/$/, '')}/`;
-  const image = meta?.image ?? `${env.APP_URL.replace(/\/$/, '')}/assets/sandman-logo.webp`;
+  const canonical = meta?.canonical ?? `${base}/`;
+  const image = meta?.image || `${base}/assets/sandman-logo.webp`;
+  const imageAlt = meta?.imageAlt || title;
+  const type = meta?.type ?? 'website';
+  const robots = meta?.robots ?? 'index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1';
+  const jsonLd = [websiteStructuredData(base), ...(meta?.jsonLd ?? [])];
+  const productTags = type === 'product'
+    ? `${meta?.productPrice ? `<meta property="product:price:amount" content="${htmlEsc(meta.productPrice)}" />` : ''}${meta?.productCurrency ? `<meta property="product:price:currency" content="${htmlEsc(meta.productCurrency)}" />` : ''}${meta?.availability ? `<meta property="product:availability" content="${htmlEsc(meta.availability)}" />` : ''}`
+    : '';
+  const structuredData = jsonLd.map((data, index) => `<script type="application/ld+json"${index ? ' data-sandman-page-schema="1"' : ''}>${safeJsonLd(data)}</script>`).join('');
   return storefrontTemplate
     .replace(/<title>[^<]*<\/title>/, `<title>${htmlEsc(title)}</title>`)
     .replace(/<meta name="description" content="[^"]*"\s*\/>/, `<meta name="description" content="${htmlEsc(description)}" />`)
-    .replace('</head>', `<link rel="canonical" href="${htmlEsc(canonical)}" /><meta property="og:title" content="${htmlEsc(title)}" /><meta property="og:description" content="${htmlEsc(description)}" /><meta property="og:url" content="${htmlEsc(canonical)}" /><meta property="og:type" content="website" /><meta property="og:image" content="${htmlEsc(image)}" /><meta name="twitter:card" content="summary_large_image" /></head>`);
+    .replace('</head>', `<link rel="canonical" href="${htmlEsc(canonical)}" /><meta name="robots" content="${htmlEsc(robots)}" /><meta property="og:site_name" content="SANDMAN" /><meta property="og:locale" content="en_US" /><meta property="og:title" content="${htmlEsc(title)}" /><meta property="og:description" content="${htmlEsc(description)}" /><meta property="og:url" content="${htmlEsc(canonical)}" /><meta property="og:type" content="${type}" /><meta property="og:image" content="${htmlEsc(image)}" /><meta property="og:image:alt" content="${htmlEsc(imageAlt)}" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${htmlEsc(title)}" /><meta name="twitter:description" content="${htmlEsc(description)}" /><meta name="twitter:image" content="${htmlEsc(image)}" />${productTags}${structuredData}</head>`);
 }
-const sendStorefront = (res: express.Response, meta?: Parameters<typeof storefrontHtml>[0]) => res.type('html').send(storefrontHtml(meta));
+const sendStorefront = (res: express.Response, meta?: StorefrontMeta) => res.type('html').send(storefrontHtml(meta));
 
 app.get('/', (_req, res) => sendStorefront(res));
 app.get('/products/:slug', asyncHandler(async (req, res) => {
   const slug = String(req.params.slug ?? '');
   const product = await prisma.product.findFirst({
     where: { slug, status: 'ACTIVE' },
-    select: { name: true, shortDesc: true, description: true, brand: true, seoTitle: true, seoDescription: true, images: { orderBy: { position: 'asc' }, take: 1 } },
+    select: {
+      slug: true,
+      name: true,
+      sku: true,
+      brand: true,
+      manufacturerPn: true,
+      description: true,
+      shortDesc: true,
+      seoTitle: true,
+      seoDescription: true,
+      priceCents: true,
+      currency: true,
+      condition: true,
+      sourceType: true,
+      stockQuantity: true,
+      category: { select: { name: true, slug: true } },
+      images: { orderBy: { position: 'asc' }, take: 8, select: { url: true, alt: true } },
+      supplierLinks: { where: { active: true }, take: 8, select: { active: true, stock: true, availableStock: true } },
+    },
   });
   if (!product) {
     res.status(404);
-    return sendStorefront(res, { title: 'Product not found — SANDMAN', description: 'This SANDMAN product is unavailable.', canonical: `${env.APP_URL.replace(/\/$/, '')}/products/${encodeURIComponent(slug)}` });
+    return sendStorefront(res, {
+      title: 'Product not found — SANDMAN',
+      description: 'This SANDMAN product is unavailable.',
+      canonical: `${env.APP_URL.replace(/\/$/, '')}/products/${encodeURIComponent(slug)}`,
+      robots: 'noindex,follow',
+    });
   }
-  return sendStorefront(res, {
-    title: product.seoTitle || `${product.name}${product.brand ? ` | ${product.brand}` : ''} — SANDMAN`,
-    description: product.seoDescription || product.shortDesc || product.description.slice(0, 155),
-    canonical: `${env.APP_URL.replace(/\/$/, '')}/products/${encodeURIComponent(slug)}`,
-    image: product.images[0]?.url ?? null,
-  });
+  return sendStorefront(res, buildProductSeo(product, env.APP_URL));
 }));
 
 app.get('/robots.txt', (_req, res) => {
   res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\nDisallow: /account\nDisallow: /checkout\nDisallow: /orders\nDisallow: /seller$\nDisallow: /garage\nDisallow: /messages\nDisallow: /wishlist\nDisallow: /notifications\nDisallow: /returns-center\nSitemap: ${env.APP_URL.replace(/\/$/, '')}/sitemap.xml\n`);
 });
-let sitemapCache: { expiresAt: number; xml: string } | null = null;
+
+const SITEMAP_PRODUCT_PAGE_SIZE = 45_000;
+const SITEMAP_STATIC_PATHS = ['/', '/shop', '/vehicles', '/build-advisor', '/marketplace', '/verified-fit', '/buyer-protection', '/shipping', '/returns', '/terms', '/privacy', '/cookies', '/seller-terms', '/prohibited-products', '/about'];
+let sitemapIndexCache: { expiresAt: number; xml: string } | null = null;
+
 app.get('/sitemap.xml', asyncHandler(async (_req, res) => {
-  if (sitemapCache && sitemapCache.expiresAt > Date.now()) {
-    res.setHeader('Cache-Control', 'public, max-age=900');
-    return res.type('application/xml').send(sitemapCache.xml);
+  if (sitemapIndexCache && sitemapIndexCache.expiresAt > Date.now()) {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    return res.type('application/xml').send(sitemapIndexCache.xml);
   }
-  // A sitemap file may contain at most 50,000 URLs. Leave room for the static
-  // storefront routes below instead of accidentally producing an invalid file.
-  const products = await prisma.product.findMany({ where: { status: 'ACTIVE' }, select: { slug: true, updatedAt: true }, orderBy: { updatedAt: 'desc' }, take: 49_980 });
   const base = env.APP_URL.replace(/\/$/, '');
-  const staticPaths = ['/', '/shop', '/vehicles', '/build-advisor', '/marketplace', '/verified-fit', '/buyer-protection', '/shipping', '/returns', '/terms', '/privacy', '/cookies', '/seller-terms', '/prohibited-products', '/about'];
-  const urls = [
-    ...staticPaths.map(pathname => `<url><loc>${htmlEsc(base + pathname)}</loc></url>`),
-    ...products.map(product => `<url><loc>${htmlEsc(`${base}/products/${encodeURIComponent(product.slug)}`)}</loc><lastmod>${product.updatedAt.toISOString()}</lastmod></url>`),
-  ].join('');
-  const xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`;
-  sitemapCache = { expiresAt: Date.now() + 15 * 60 * 1000, xml };
-  res.setHeader('Cache-Control', 'public, max-age=900');
+  const productCount = await prisma.product.count({ where: { status: 'ACTIVE' } });
+  const productPages = Math.ceil(productCount / SITEMAP_PRODUCT_PAGE_SIZE);
+  const sitemapUrls = [
+    `${base}/sitemaps/static.xml`,
+    ...Array.from({ length: productPages }, (_, index) => `${base}/sitemaps/products-${index + 1}.xml`),
+  ];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${sitemapUrls.map(url => `<sitemap><loc>${htmlEsc(url)}</loc></sitemap>`).join('')}</sitemapindex>`;
+  sitemapIndexCache = { expiresAt: Date.now() + 60 * 60 * 1000, xml };
+  res.setHeader('Cache-Control', 'public, max-age=3600');
   res.type('application/xml').send(xml);
+}));
+
+app.get('/sitemaps/static.xml', (_req, res) => {
+  const base = env.APP_URL.replace(/\/$/, '');
+  const urls = SITEMAP_STATIC_PATHS.map(pathname => `<url><loc>${htmlEsc(base + pathname)}</loc></url>`).join('');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
+});
+
+app.get('/sitemaps/products-:page.xml', asyncHandler(async (req, res) => {
+  const page = Number(req.params.page);
+  if (!Number.isSafeInteger(page) || page < 1) return res.status(404).end();
+  const skip = (page - 1) * SITEMAP_PRODUCT_PAGE_SIZE;
+  const products = await prisma.product.findMany({
+    where: { status: 'ACTIVE' },
+    select: { slug: true, updatedAt: true },
+    orderBy: [{ slug: 'asc' }],
+    skip,
+    take: SITEMAP_PRODUCT_PAGE_SIZE,
+  });
+  if (!products.length) return res.status(404).end();
+  const base = env.APP_URL.replace(/\/$/, '');
+  const urls = products.map(product => `<url><loc>${htmlEsc(`${base}/products/${encodeURIComponent(product.slug)}`)}</loc><lastmod>${product.updatedAt.toISOString()}</lastmod></url>`).join('');
+  res.setHeader('Cache-Control', 'public, max-age=3600');
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
 }));
 
 app.use('/api/health', healthRouter);

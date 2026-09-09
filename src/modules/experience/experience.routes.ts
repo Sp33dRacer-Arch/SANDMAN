@@ -12,12 +12,23 @@ export const experienceRouter = Router();
 
 experienceRouter.get('/home', optionalAuth, asyncHandler(async (req, res) => {
   const primary = req.auth ? await prisma.garageVehicle.findFirst({ where: { userId: req.auth.userId, isPrimary: true }, include: { vehicleVariant: { include: { model: { include: { make: true } } } } } }) : null;
-  const [trending, marketplace, forGarage] = await Promise.all([
+  const [trending, marketplace, forGarage, vinyasa] = await Promise.all([
     prisma.product.findMany({ where: { status: 'ACTIVE' }, include: { images: { orderBy: { position: 'asc' }, take: 1 }, category: true }, orderBy: [{ purchaseCount: 'desc' }, { viewCount: 'desc' }], take: 8 }),
     prisma.product.findMany({ where: { status: 'ACTIVE', sourceType: 'MARKETPLACE', stockQuantity: { gt: 0 } }, include: { images: { orderBy: { position: 'asc' }, take: 1 }, category: true, seller: { select: { id: true, sellerProfile: true } } }, orderBy: { createdAt: 'desc' }, take: 8 }),
     primary ? prisma.product.findMany({ where: { status: 'ACTIVE', OR: [{ isUniversal: true }, { fitments: { some: { vehicleVariantId: primary.vehicleVariantId } } }] }, include: { images: { orderBy: { position: 'asc' }, take: 1 }, category: true }, orderBy: [{ purchaseCount: 'desc' }, { createdAt: 'desc' }], take: 8 }) : Promise.resolve([]),
+    prisma.product.findMany({
+      where: {
+        status: 'ACTIVE',
+        sourceType: 'DROPSHIP',
+        images: { some: {} },
+        supplierLinks: { some: { active: true, supplier: { code: 'vinyasa' } } },
+      },
+      include: { images: { orderBy: { position: 'asc' }, take: 1 }, category: true },
+      orderBy: [{ purchaseCount: 'desc' }, { viewCount: 'desc' }, { createdAt: 'desc' }],
+      take: 8,
+    }),
   ]);
-  res.json({ primaryGarageVehicle: primary, trending: trending.map(publicProduct), marketplace: marketplace.map(publicProduct), forGarage: forGarage.map(publicProduct) });
+  res.json({ primaryGarageVehicle: primary, trending: trending.map(publicProduct), marketplace: marketplace.map(publicProduct), forGarage: forGarage.map(publicProduct), vinyasa: vinyasa.map(publicProduct) });
 }));
 
 experienceRouter.get('/search/suggestions', optionalAuth, asyncHandler(async (req, res) => {
@@ -56,9 +67,15 @@ experienceRouter.get('/search/suggestions', optionalAuth, asyncHandler(async (re
     }),
     prisma.category.findMany({ where: { name: { contains: q, mode: 'insensitive' } }, select: { name: true, slug: true }, take: 6 }),
   ]);
+  const imagePriority = (product: { images: unknown[] }) => product.images.length ? 45 : 0;
   const products = productCandidates
     .map(product => ({ ...product, searchScore: scoreProductSearch(product, q) }))
-    .sort((a, b) => b.searchScore - a.searchScore || b.purchaseCount - a.purchaseCount || b.viewCount - a.viewCount)
+    .sort((a, b) => {
+      const exactFirst = Number(b.searchScore >= 980) - Number(a.searchScore >= 980);
+      if (exactFirst) return exactFirst;
+      const weighted = (b.searchScore + imagePriority(b)) - (a.searchScore + imagePriority(a));
+      return weighted || b.purchaseCount - a.purchaseCount || b.viewCount - a.viewCount;
+    })
     .slice(0, 8);
   res.json({
     products,

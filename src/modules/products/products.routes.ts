@@ -37,10 +37,11 @@ const listSchema = z.object({
 
 productsRouter.get('/', asyncHandler(async (req, res) => {
   const q = listSchema.parse(req.query);
-  const orderBy = q.sort === 'price_asc' ? { priceCents: 'asc' as const }
+  const orderBy: any = q.sort === 'price_asc' ? { priceCents: 'asc' as const }
     : q.sort === 'price_desc' ? { priceCents: 'desc' as const }
     : q.sort === 'name' ? { name: 'asc' as const }
     : q.sort === 'popular' ? [{ purchaseCount: 'desc' as const }, { viewCount: 'desc' as const }]
+    : q.q ? [{ images: { _count: 'desc' as const } }, { createdAt: 'desc' as const }]
     : { createdAt: 'desc' as const };
 
   const and: any[] = [];
@@ -171,7 +172,15 @@ productsRouter.get('/', asyncHandler(async (req, res) => {
     };
   });
   if (shouldRankSearch && q.q) {
-    mapped.sort((a, b) => scoreProductSearch(b, q.q!) - scoreProductSearch(a, q.q!) || b.purchaseCount - a.purchaseCount || b.viewCount - a.viewCount);
+    const imagePriority = (item: { images?: unknown[] }) => item.images?.length ? 45 : 0;
+    mapped.sort((a, b) => {
+      const aScore = scoreProductSearch(a, q.q!);
+      const bScore = scoreProductSearch(b, q.q!);
+      const exactFirst = Number(bScore >= 930) - Number(aScore >= 930);
+      if (exactFirst) return exactFirst;
+      const weighted = (bScore + imagePriority(b)) - (aScore + imagePriority(a));
+      return weighted || b.purchaseCount - a.purchaseCount || b.viewCount - a.viewCount;
+    });
   }
   if (q.q) await prisma.searchEvent.create({ data: { query: q.q, resultsCount: total } }).catch(() => undefined);
   res.json({ items: mapped, total, page: q.page, pages: Math.max(1, Math.ceil(total / q.limit)) });

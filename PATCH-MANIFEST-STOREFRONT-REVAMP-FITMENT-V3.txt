@@ -1,0 +1,57 @@
+SANDMAN V2.6.1 — STOREFRONT REVAMP + FITMENT + PRODUCT SEO V3 — FIXED
+PATCH MANIFEST
+Date: 2026-09-09
+
+DIRECT PATCH FILES
+- APPLY-STOREFRONT-REVAMP-FITMENT-V3.ps1
+- CHANGELOG-STOREFRONT-REVAMP-FITMENT-V3.md
+- INSTALL-STOREFRONT-REVAMP-FITMENT-V3.txt
+- STOREFRONT-REVAMP-FITMENT-V3-SCAN-REPORT.txt
+- VERIFY-STOREFRONT-REVAMP-FITMENT-V3.ps1
+- scripts/apply-storefront-revamp-fitment-v3.mjs
+- scripts/apply-storefront-seo-v3.mjs
+- scripts/apply-storefront-v3-hardening.mjs
+- scripts/static-storefront-revamp-fitment-v3-audit.mjs
+- scripts/static-storefront-seo-v3-audit.mjs
+- scripts/static-storefront-v3-hardening-audit.mjs
+- src/services/storefront-seo.service.ts
+- src/services/vehicle-catalog-bootstrap.service.ts
+- tests/storefront-seo.test.ts
+- tests/vinyasa-fitment-import.test.ts
+
+FIXES INCLUDED
+- storefront navigation/pagination and image fallback
+- Vinyasa homepage merchandising and relevance-safe image priority search
+- Messages multi-conversation binding
+- Vinyasa fitment/applications normalization with bounded expansion
+- curated engine-code preservation and vehicle bootstrap ordering
+- automatic product SEO, canonical/social metadata, Product/Offer/Breadcrumb/SearchAction JSON-LD
+- scalable product sitemaps without database SEO backfill
+- legacy supplier SEO override hardening
+- stale SPA metadata reset and client Product/Breadcrumb JSON-LD refresh
+- safe generic supplier fitment mapping to fully-covered curated variants
+- stale unverified Vinyasa fitment refresh while preserving manual/verified evidence
+
+SAFETY BOUNDARIES
+- Does not include or modify .env or Railway/Vinyasa secrets.
+- Does not modify Prisma schema or migrations.
+- Does not change payment configuration.
+- Does not enable supplier order submission.
+- Does not bulk-write SEO fields.
+
+SHA256 (all patch files except this manifest)
+12edbc03bad3925ca5d14a0f3dfc1381640c2e3052eeb0bacbd249a79a5d2ba9  ./APPLY-STOREFRONT-REVAMP-FITMENT-V3.ps1
+313e56f8cae5fe11f01cca918a783c0a1290caa61101ce9448cef7705541d1d3  ./CHANGELOG-STOREFRONT-REVAMP-FITMENT-V3.md
+e85848755a1f3c7dcf73a895cb215494c60537c443ca42843ea393b4e92ac54f  ./INSTALL-STOREFRONT-REVAMP-FITMENT-V3.txt
+3c4e52d834fdccfb5686fbd6cba8a13e6ceee6fc08fb7d4cc09e11ac1efd6471  ./STOREFRONT-REVAMP-FITMENT-V3-SCAN-REPORT.txt
+ca15b46380aaec2a4d11c37f08096fac7b3d242e5bf3e9dc1294e3afc5f064c0  ./VERIFY-STOREFRONT-REVAMP-FITMENT-V3.ps1
+1946b1ff6764d28e22cce17f3cb1901bd1e49d73aa1f701cfd330148879e8b63  ./scripts/apply-storefront-revamp-fitment-v3.mjs
+405e72f79e85aa87fc2286a88e088d94fc79c2c79b5bd96c87c6c61ab6184106  ./scripts/apply-storefront-seo-v3.mjs
+2ee4e5ca912b2097c9ef226b6521bc913bf697aac51f5de09f5f75bde70e67dc  ./scripts/apply-storefront-v3-hardening.mjs
+c318f5780387feb64504d4fd281b83ed60862691ac697612cc0c93e62bc60b71  ./scripts/static-storefront-revamp-fitment-v3-audit.mjs
+361818d7ddce6058c2d0dfe7ccd4325b28d175e1790a8063376869fa2df6190f  ./scripts/static-storefront-seo-v3-audit.mjs
+1f4963b51bb9d1ef38002001f1a28f14cb0d7453708f2640862215f49bcbe850  ./scripts/static-storefront-v3-hardening-audit.mjs
+ca2246059b6cf1b565836abd74b0cbc0e9ed715da166af6ef0ebcbd171005452  ./src/services/storefront-seo.service.ts
+647d7092483f8545f5a89f5b0e5ef3e6870db1e385eead7fe8ecc118928e65c3  ./src/services/vehicle-catalog-bootstrap.service.ts
+0969c6b454e2e3585a4966cf39436572613e5cf645365c816921b4a1bcff86b9  ./tests/storefront-seo.test.ts
+28a7fbd1a15a77d5cc023d8cd95d1f6b4df6000a1f869ea16755f8194257cdb4  ./tests/vinyasa-fitment-import.test.ts

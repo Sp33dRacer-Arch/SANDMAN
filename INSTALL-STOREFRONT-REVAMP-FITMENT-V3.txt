@@ -1,0 +1,67 @@
+SANDMAN V2.6.1 — STOREFRONT REVAMP + FITMENT + PRODUCT SEO V3
+
+TARGET PROJECT
+C:\Users\asand\Downloads\SANDMAN-backend
+
+IMPORTANT
+- Apply this only to the current SANDMAN V2.6.1 project after the verified storefront UX + Vinyasa 5M/image-repair patch.
+- Keep VINYASA_AUTO_SYNC_ENABLED=false while validating production.
+- Do not run a multi-million-product import immediately after the recent database recovery.
+- The patch does not touch .env, Railway secrets, payment settings, Prisma schema/migrations, or enable supplier order submission.
+- Product SEO is generated automatically at request time; this patch does NOT bulk-write millions of SEO rows into Postgres.
+
+INSTALL
+1. Extract this ZIP.
+2. Copy/overlay every file and folder from the extracted patch into:
+   C:\Users\asand\Downloads\SANDMAN-backend
+   Do not overwrite .env.
+3. Open PowerShell in SANDMAN-backend.
+4. Run:
+   powershell -ExecutionPolicy Bypass -File .\APPLY-STOREFRONT-REVAMP-FITMENT-V3.ps1
+5. Do not commit or deploy unless the verifier ends with:
+   SANDMAN storefront revamp + fitment + SEO V3 verification passed.
+
+PRODUCT SEO INCLUDED
+- Automatic unique SEO title for every ACTIVE product when seoTitle is blank.
+- Automatic SEO description for every ACTIVE product when seoDescription is blank.
+- Existing manual seoTitle / seoDescription values remain authoritative.
+- Canonical product URLs.
+- index/follow product robots metadata and noindex on missing product pages.
+- Open Graph product metadata for link previews.
+- Twitter large-image metadata.
+- Product price, currency and known availability metadata.
+- Schema.org Product + Offer JSON-LD.
+- Schema.org BreadcrumbList JSON-LD.
+- WebSite SearchAction JSON-LD.
+- Product image and image-alt metadata.
+- Client-side title/canonical/social metadata refresh during SPA navigation.
+- Scalable sitemap index with 45,000 products per child sitemap instead of the old 49,980-product ceiling.
+- robots.txt continues to advertise /sitemap.xml.
+
+WHAT THE VERIFIER DOES
+- checks V3 + SEO patcher syntax
+- checks storefront JavaScript syntax
+- runs the V3 storefront/fitment static audit
+- runs the product SEO static audit
+- runs the existing storefront UX + Vinyasa 5M/full SANDMAN verifier when present
+- that existing verifier runs Prisma generation/validation, TypeScript, tests, production build and whitespace checks on the installed project
+
+AFTER DEPLOYMENT
+- Confirm home, shop pagination, search, product pages, Messages, Garage/fitment and Vinyasa home listings.
+- Open one product URL directly and view page source to confirm title, description, canonical, Open Graph and JSON-LD are server-rendered.
+- Open /robots.txt and /sitemap.xml.
+- Open /sitemaps/static.xml and /sitemaps/products-1.xml.
+- The bundled vehicle catalogue bootstraps automatically.
+- Existing Vinyasa products gain supplier fitment when those supplier rows are re-synced. Vinyasa does not provide fitment for every product, so UNKNOWN remains valid.
+- Use missing-image repair in controlled batches rather than a giant catalogue import while the Railway Postgres volume has limited headroom.
+
+
+ERROR-SCAN HARDENING (2026-09-09)
+- Adds a third, idempotent hardening pass after the revamp and SEO passes.
+- Fixes generic Vinyasa fitment mapping to existing engine-coded variants without guessing partial-year compatibility.
+- Refreshes stale unverified Vinyasa supplier fitments while preserving manual/verified evidence.
+- Prevents legacy importer-generated seoTitle/seoDescription values from overriding automatic part-number SEO.
+- Clears stale SPA social/product metadata and refreshes Product/Breadcrumb JSON-LD on client-side navigation.
+- No Prisma migration and no bulk SEO writes are added.
+
+Do not commit/push unless VERIFY-STOREFRONT-REVAMP-FITMENT-V3.ps1 passes in the real SANDMAN-backend workspace.

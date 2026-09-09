@@ -1,0 +1,85 @@
+SANDMAN V2.6.1 — STOREFRONT REVAMP + VINYASA FITMENT V3
+SOURCE / RECONSTRUCTION SCAN REPORT
+Date: 2026-09-08
+
+RESULT
+PASS at source/static level on a reconstructed current SANDMAN V2.6.1 stack.
+
+RECONSTRUCTED BASELINE
+- SANDMAN V2.5 scan-fixed full tree
+- V2.5.1 PayPal patch
+- V2.5.2 wallets backend
+- V2.6.1 Vinyasa fixed backend
+- verified storefront UX + Vinyasa 5M/image-repair patch
+- V5 money-unit typecheck hotfix
+
+V3 VALIDATION COMPLETED
+PASS - V3 patcher JavaScript syntax
+PASS - V3 applied cleanly to reconstructed current baseline
+PASS - V3 installer idempotence
+PASS - V3 repaired a reconstructed previously-applied V2 revamp
+PASS - storefront JavaScript syntax
+PASS - V3 storefront/fitment static audit (20/20)
+PASS - existing storefront UX audit (18/18)
+PASS - existing V2.4.1 security audit
+PASS - existing V2.5 commerce audit
+PASS - existing PayPal hardening audit
+PASS - existing wallets audit
+PASS - existing Vinyasa hardening audit
+PASS - strict standalone TypeScript compile of vinyasa-normalizer.ts
+PASS - oversized Vinyasa fitment-axis smoke test capped at 250 rows
+PASS - documented Vinyasa fitment/applications normalization smoke test
+
+V3 DEFECTS FIXED FROM THE UNRELEASED V2 REVAMP
+1. Messages selector: String.replace interpreted `$$` as a single `$`, binding only one conversation button. V3 uses a replacement callback and preserves the `$$` selector.
+2. Startup race: Vinyasa scheduler previously started before curated vehicle bootstrap. V3 starts the scheduler after bootstrap settles.
+3. Curated engine loss: engine-coded bundled rows (including B58/N55) previously became UNSPECIFIED. V3 preserves the curated engine field.
+4. Fitment axis growth: large make/model/year/engine axes could expand excessively before final slicing. V3 bounds expansion during normalization.
+5. Search relevance: V2 could make any photographed result outrank much stronger non-image broad matches and could demote exact-name matches. V3 keeps exact matches first and uses a 45-point image bonus.
+
+LIMITATIONS / REQUIRED LOCAL GATE
+This sandbox does not contain the user's installed node_modules, live database, or Railway environment. The included PowerShell verifier therefore chains into the existing local SANDMAN V2.6.1 verifier, which must pass Prisma generation/validation, dependency-backed TypeScript typecheck, Vitest, production build and whitespace checks before commit/deploy.
+
+SAFETY
+- No .env or Railway secret changed.
+- No Prisma schema/migration changed.
+- No payment configuration changed.
+- No supplier order-submission setting changed.
+- Vinyasa fitment remains supplier evidence, not independent SANDMAN verification.
+
+SEO V3 ADDITIONAL VALIDATION
+PASS - automatic product SEO patcher syntax
+PASS - automatic product SEO applied cleanly to reconstructed V3 baseline
+PASS - storefront JavaScript syntax after SEO client-meta upgrade
+PASS - standalone strict TypeScript compile of storefront-seo.service.ts
+PASS - product SEO static audit (19/19)
+PASS - manual SEO remains authoritative with bounded automatic fallbacks
+PASS - Product + Offer JSON-LD markers
+PASS - BreadcrumbList + WebSite SearchAction JSON-LD markers
+PASS - JSON-LD script-escape guard
+PASS - canonical / robots / Open Graph / Twitter product metadata markers
+PASS - noindex product 404 marker
+PASS - scalable sitemap index + 45,000-product child sitemap markers
+PASS - old 49,980-product sitemap ceiling removed
+
+SEO SAFETY
+- No product-table backfill is performed.
+- No Prisma schema or migration is changed.
+- No .env, Railway secret, payment setting, or supplier-order setting is changed.
+- SEO generation is read-only against product/category/image/supplier stock data.
+
+POST-SEO ERROR-SCAN HARDENING VALIDATION (2026-09-09)
+PASS - hardening patcher JavaScript syntax
+PASS - hardening audit JavaScript syntax
+PASS - hardening applied to reconstructed current V3 + SEO baseline
+PASS - storefront JavaScript syntax after hardening
+PASS - V3 storefront/fitment audit (20/20)
+PASS - product SEO audit (19/19)
+PASS - storefront hardening audit (19/19)
+PASS - legacy supplier-generated SEO is ignored without overriding genuine custom SEO
+PASS - SPA product metadata clears stale social/product tags and refreshes Product/Breadcrumb JSON-LD
+PASS - generic supplier fitment maps only to curated variants fully covered by supplier years
+PASS - stale unverified Vinyasa supplier fitment rows refresh while manual/verified evidence is preserved
+
+FINAL PACKAGE NOTE
+The ZIP is a direct patch, not a replacement project tree. The dependency-backed Prisma/TypeScript/Vitest/production-build gate must still be run inside the user's real SANDMAN-backend workspace before commit/deploy.

@@ -287,37 +287,124 @@ async function productForNewLink(row: VinyasaNormalizedProduct) {
   return prisma.product.findUnique({ where: { sku: prefixedSku } });
 }
 
+const VINYASA_SUPPLIER_FITMENT_NOTE = 'Imported from Vinyasa supplier compatibility data; catalogue fit only, not independently verified by SANDMAN.';
+
+async function ensureSupplierVehicleVariants(fitment: VinyasaNormalizedProduct['fitments'][number]) {
+  const makeName = fitment.make?.trim();
+  const modelName = fitment.model?.trim();
+  const rawYearStart = fitment.yearStart ?? fitment.yearEnd;
+  const rawYearEnd = fitment.yearEnd ?? fitment.yearStart;
+  if (!makeName || !modelName || rawYearStart == null || rawYearEnd == null) return [] as string[];
+  const yearStart = Math.min(rawYearStart, rawYearEnd);
+  const yearEnd = Math.max(rawYearStart, rawYearEnd);
+
+  const makeSlug = slugifyVinyasa(makeName);
+  let make = await prisma.vehicleMake.findFirst({ where: { OR: [{ name: { equals: makeName, mode: 'insensitive' } }, { slug: makeSlug }] } });
+  if (!make) make = await prisma.vehicleMake.create({ data: { name: makeName, slug: makeSlug } });
+  const modelSlug = slugifyVinyasa(modelName);
+  let model = await prisma.vehicleModel.findFirst({ where: { makeId: make.id, OR: [{ name: { equals: modelName, mode: 'insensitive' } }, { slug: modelSlug }] } });
+  if (!model) model = await prisma.vehicleModel.create({ data: { makeId: make.id, name: modelName, slug: modelSlug } });
+
+  const supplierEngine = fitment.engineCode?.trim() || fitment.engineName?.trim();
+  // ProductFitment is variant-level, not year-level. Only attach to an existing
+  // curated variant when the supplier's year range fully covers that variant;
+  // partial overlap would incorrectly mark unsupported years as fitting.
+  const candidates = await prisma.vehicleVariant.findMany({
+    where: {
+      modelId: model.id,
+      yearStart: { gte: yearStart },
+      yearEnd: { lte: yearEnd },
+      ...(supplierEngine ? { OR: [
+        { engineCode: { equals: supplierEngine, mode: 'insensitive' } },
+        { engineName: { equals: supplierEngine, mode: 'insensitive' } },
+      ] } : {}),
+    },
+    select: { id: true },
+    take: 500,
+  });
+  if (candidates.length) return candidates.map(candidate => candidate.id);
+
+  // No safe curated match exists. Preserve the supplier evidence as an exact
+  // synthetic range instead of guessing compatibility for a broader variant.
+  const engineCode = fitment.engineCode?.trim() || fitment.engineName?.trim() || 'UNSPECIFIED';
+  const engineName = fitment.engineName?.trim() || fitment.engineCode?.trim() || 'Multiple / unspecified engines';
+  const existingSynthetic = await prisma.vehicleVariant.findFirst({
+    where: { modelId: model.id, yearStart, yearEnd, engineCode: { equals: engineCode, mode: 'insensitive' }, engineName: { equals: engineName, mode: 'insensitive' } },
+    select: { id: true },
+  });
+  if (existingSynthetic) return [existingSynthetic.id];
+  const created = await prisma.vehicleVariant.create({ data: { modelId: model.id, yearStart, yearEnd, engineCode, engineName }, select: { id: true } });
+  return [created.id];
+}
+
 async function syncFitments(productId: string, row: VinyasaNormalizedProduct) {
   if (!row.fitments.length) return 0;
   const ids = new Set<string>();
+  const applicationRows: VinyasaNormalizedProduct['fitments'] = [];
   for (const fitment of row.fitments) {
     if (fitment.vehicleVariantId) {
       const exists = await prisma.vehicleVariant.findUnique({ where: { id: fitment.vehicleVariantId }, select: { id: true } });
       if (exists) ids.add(exists.id);
       continue;
     }
-    if (!fitment.engineCode) continue;
+    if (fitment.make && fitment.model && (fitment.yearStart != null || fitment.yearEnd != null)) {
+      const resolved = await ensureSupplierVehicleVariants(fitment);
+      for (const vehicleVariantId of resolved) ids.add(vehicleVariantId);
+      continue;
+    }
+    if (fitment.engineCode) {
+      const candidates = await prisma.vehicleVariant.findMany({ where: { engineCode: { equals: fitment.engineCode, mode: 'insensitive' } }, select: { id: true, yearStart: true, yearEnd: true }, take: 150 });
+      for (const variant of candidates) {
+        const supplierStart = fitment.yearStart ?? fitment.yearEnd;
+        const supplierEnd = fitment.yearEnd ?? fitment.yearStart;
+        const fullyCovered = supplierStart == null || supplierEnd == null
+          ? true
+          : variant.yearStart >= Math.min(supplierStart, supplierEnd) && variant.yearEnd <= Math.max(supplierStart, supplierEnd);
+        if (fullyCovered) ids.add(variant.id);
+      }
+      continue;
+    }
+    if (fitment.applicationText) applicationRows.push(fitment);
+  }
+
+  for (const fitment of applicationRows.slice(0, 40)) {
+    if (fitment.yearStart == null && fitment.yearEnd == null) continue;
     const candidates = await prisma.vehicleVariant.findMany({
-      where: { engineCode: fitment.engineCode },
-      select: { id: true, yearStart: true, yearEnd: true },
-      take: 100,
+      where: {
+        ...(fitment.yearStart != null ? { yearStart: { gte: fitment.yearStart } } : {}),
+        ...(fitment.yearEnd != null ? { yearEnd: { lte: fitment.yearEnd } } : {}),
+      },
+      include: { model: { include: { make: true } } }, take: 400,
     });
+    const applicationText = fitment.applicationText;
+    if (!applicationText) continue;
+    const haystack = ` ${applicationText.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
     for (const variant of candidates) {
-      const overlaps = (fitment.yearStart == null || variant.yearEnd >= fitment.yearStart)
-        && (fitment.yearEnd == null || variant.yearStart <= fitment.yearEnd);
-      if (overlaps) ids.add(variant.id);
+      const make = ` ${variant.model.make.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+      const model = ` ${variant.model.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
+      if (make.trim().length < 2 || model.trim().length < 2 || !haystack.includes(make) || !haystack.includes(model)) continue;
+      const engineCode = variant.engineCode.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const engineName = variant.engineName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const engineMatches = variant.engineCode === 'UNSPECIFIED'
+        || (engineCode.length >= 3 && haystack.includes(` ${engineCode} `))
+        || (engineName.length >= 4 && engineName !== 'multiple unspecified engines' && haystack.includes(` ${engineName} `));
+      if (engineMatches) ids.add(variant.id);
     }
   }
   if (!ids.size) return 0;
-  await prisma.productFitment.createMany({
-    data: [...ids].map(vehicleVariantId => ({
+
+  // Refresh only the Vinyasa-generated, unverified rows. Manual and verified
+  // fitment evidence is never deleted by a supplier synchronization.
+  await prisma.productFitment.deleteMany({
+    where: {
       productId,
-      vehicleVariantId,
-      verified: false,
-      compatibility: 'FITS',
       source: 'SUPPLIER',
-      notes: 'Imported from Vinyasa supplier compatibility data; not independently verified by SANDMAN.',
-    })),
+      verified: false,
+      notes: { startsWith: 'Imported from Vinyasa supplier compatibility data;' },
+    },
+  });
+  await prisma.productFitment.createMany({
+    data: [...ids].map(vehicleVariantId => ({ productId, vehicleVariantId, verified: false, compatibility: 'FITS', source: 'SUPPLIER', notes: VINYASA_SUPPLIER_FITMENT_NOTE })),
     skipDuplicates: true,
   });
   return ids.size;

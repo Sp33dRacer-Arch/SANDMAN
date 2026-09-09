@@ -3,11 +3,15 @@ import { env } from './config/env';
 import { prisma } from './lib/prisma';
 import { releaseExpiredCheckoutReservations } from './services/checkout-reservation.service';
 import { startVinyasaScheduler, stopVinyasaScheduler } from './services/vinyasa-scheduler.service';
+import { ensureCuratedVehicleCatalog } from './services/vehicle-catalog-bootstrap.service';
 
 const server = app.listen(env.PORT, () => {
   console.log(`SANDMAN API running on ${env.API_URL} (port ${env.PORT})`);
   void releaseExpiredCheckoutReservations().catch(error => console.error('Initial checkout reservation cleanup failed', error));
-  startVinyasaScheduler();
+  void ensureCuratedVehicleCatalog()
+    .then(result => console.log(`Vehicle catalogue ready: ${result.after} variants${result.skipped ? '' : ` (${result.variantsCreated} added)`}.`))
+    .catch(error => console.error('Vehicle catalogue bootstrap failed', error))
+    .finally(() => startVinyasaScheduler());
 });
 
 const reservationCleanupTimer = setInterval(() => {
