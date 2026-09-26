@@ -3,6 +3,7 @@
 // file unless you pass --force.
 //
 // Serves a tab-separated Google Merchant Center product feed for scheduled fetch.
+
 import { Router } from 'express';
 import { prisma } from '../../lib/prisma';
 import { asyncHandler } from '../../lib/async-handler';
@@ -13,19 +14,37 @@ const CURRENCY = 'USD'; // TODO: change if you sell in a different currency
 const SITE_URL = 'https://sandman-production-eef6.up.railway.app'; // TODO: set your real storefront domain
 const PAGE_SIZE = 500;
 
-function tsv(value) {
+function tsv(value: unknown): string {
   if (value === null || value === undefined) return '';
   return String(value).replace(/[\t\n\r]/g, ' ').trim();
 }
 
-function money(value, currency) {
-  return value === null || value === undefined ? '' : Number(value).toFixed(2) + ' ' + (currency || CURRENCY);
+function money(
+  value: unknown,
+  currency: string | null | undefined,
+): string {
+  if (value === null || value === undefined) return '';
+
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) return '';
+
+  return `${numericValue.toFixed(2)} ${currency || CURRENCY}`;
 }
 
-const CONDITION_MAP = { NEW: 'new', USED: 'used', REFURBISHED: 'refurbished', REMANUFACTURED: 'refurbished' };
-function condition(value) {
+const CONDITION_MAP = {
+  NEW: 'new',
+  USED: 'used',
+  REFURBISHED: 'refurbished',
+  REMANUFACTURED: 'refurbished',
+} as const;
+
+function condition(value: unknown): string {
   if (value === null || value === undefined) return 'new';
-  return CONDITION_MAP[value] || String(value).toLowerCase();
+
+  const key = String(value).toUpperCase() as keyof typeof CONDITION_MAP;
+
+  return CONDITION_MAP[key] || String(value).toLowerCase();
 }
 
 const FEED_COLUMNS = [
@@ -48,47 +67,82 @@ const FEED_COLUMNS = [
   'google_product_category',
 ];
 
-feedsRouter.get('/google-merchant.txt', asyncHandler(async (req, res) => {
-  res.setHeader('Content-Type', 'text/tab-separated-values; charset=utf-8');
-  res.write(FEED_COLUMNS.join('\t') + '\n');
+feedsRouter.get(
+  '/google-merchant.txt',
+  asyncHandler(async (req, res) => {
+    res.setHeader(
+      'Content-Type',
+      'text/tab-separated-values; charset=utf-8',
+    );
 
-  let cursor;
-  while (true) {
-    const rows = await prisma.product.findMany({
-      take: PAGE_SIZE,
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-      orderBy: { id: 'asc' },
-      where: { status: 'ACTIVE' },
-      include: { images: true },
-    });
-    if (!rows.length) break;
+    res.write(FEED_COLUMNS.join('\t') + '\n');
 
-    for (const p of rows) {
-      const row = [
-        p.id,
-        p.name,
-        p.description,
-        SITE_URL + '/products/' + p.slug,
-        p.images[0]?.url ?? '',
-        p.images.slice(1, 11).map(i => i.url).join(','),
-        p.stockQuantity > 0 ? 'in_stock' : 'out_of_stock',
-        money((p.priceCents == null ? null : p.priceCents / 100), p.currency),
-        money((p.compareAtCents == null ? null : p.compareAtCents / 100), p.currency),
-        p.brand ?? '',
-        '',
-        p.manufacturerPn ?? '',
-        condition(p.condition),
-        '',
-        '',
-        '',
-        '',
-      ].map(tsv);
-      res.write(row.join('\t') + '\n');
+    let cursor: string | undefined;
+
+    while (true) {
+      const rows = await prisma.product.findMany({
+        take: PAGE_SIZE,
+        ...(cursor
+          ? {
+              skip: 1,
+              cursor: {
+                id: cursor,
+              },
+            }
+          : {}),
+        orderBy: {
+          id: 'asc',
+        },
+        where: {
+          status: 'ACTIVE',
+        },
+        include: {
+          images: true,
+        },
+      });
+
+      if (!rows.length) break;
+
+      for (const p of rows) {
+        const row = [
+          p.id,
+          p.name,
+          p.description,
+          SITE_URL + '/products/' + p.slug,
+          p.images[0]?.url ?? '',
+          p.images
+            .slice(1, 11)
+            .map((i: { url: string }) => i.url)
+            .join(','),
+          (p.stockQuantity ?? 0) > 0 ? 'in_stock' : 'out_of_stock',
+          money(
+            p.priceCents == null ? null : p.priceCents / 100,
+            p.currency,
+          ),
+          money(
+            p.compareAtCents == null ? null : p.compareAtCents / 100,
+            p.currency,
+          ),
+          p.brand ?? '',
+          '',
+          p.manufacturerPn ?? '',
+          condition(p.condition),
+          '',
+          '',
+          '',
+          '',
+        ].map(tsv);
+
+        res.write(row.join('\t') + '\n');
+      }
+
+      const lastRow = rows.at(-1);
+if (!lastRow) break;
+
+cursor = lastRow.id;
+      if (rows.length < PAGE_SIZE) break;
     }
 
-    cursor = rows[rows.length - 1].id;
-    if (rows.length < PAGE_SIZE) break;
-  }
-
-  res.end();
-}));
+    res.end();
+  }),
+);
