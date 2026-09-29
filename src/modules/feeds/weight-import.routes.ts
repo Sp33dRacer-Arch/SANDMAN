@@ -7,16 +7,6 @@ const router = Router();
 function extractWeight(text: string): number | null {
   const weights: number[] = [];
 
-  /*
-   * Explicit weight units.
-   *
-   * These are safe because they spell out the unit:
-   * lb, lbs, pound, pounds
-   * kg, kilogram, kilograms
-   * g, gram, grams
-   *
-   * Bare uppercase "G" is intentionally NOT accepted.
-   */
   const explicitRegex =
     /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|grams?|lb|lbs|pounds?)(?![a-z])/gi;
 
@@ -45,26 +35,11 @@ function extractWeight(text: string): number | null {
       grams = value;
     }
 
-    if (grams <= 0 || grams > 100000) continue;
-
-    weights.push(Math.round(grams));
+    if (grams > 0 && grams <= 100000) {
+      weights.push(Math.round(grams));
+    }
   }
 
-  /*
-   * Also accept lowercase compact gram notation such as:
-   *
-   * 2g
-   * 9g
-   * 118g
-   *
-   * But deliberately reject:
-   *
-   * 2G
-   * 5G
-   * 14G
-   *
-   * because those commonly represent automotive specifications.
-   */
   const compactGramRegex =
     /(\d+(?:\.\d+)?)\s*g(?![a-zA-Z])/g;
 
@@ -75,160 +50,111 @@ function extractWeight(text: string): number | null {
 
     const value = Number(valueText);
 
-    if (!Number.isFinite(value) || value <= 0) continue;
-
-    if (value > 100000) continue;
-
-    weights.push(Math.round(value));
+    if (
+      Number.isFinite(value) &&
+      value > 0 &&
+      value <= 100000
+    ) {
+      weights.push(Math.round(value));
+    }
   }
 
   const uniqueWeights = [...new Set(weights)];
 
-  /*
-   * If the product description contains multiple different
-   * weights, don't guess which one is the shipping weight.
-   */
   if (uniqueWeights.length !== 1) {
     return null;
   }
 
-  const weight = uniqueWeights[0];
-
-  if (weight === undefined) {
-    return null;
-  }
-
-  return weight;
+  return uniqueWeights[0] ?? null;
 }
 
 router.post(
   '/import-product-weights',
-  asyncHandler(async (_req, res) => {
-    const SCAN_BATCH = 5000;
-    const UPDATE_BATCH = 500;
+  asyncHandler(async (req, res) => {
+    const BATCH_SIZE = 1000;
 
-    let scanned = 0;
+    const afterId =
+      typeof req.query.afterId === 'string'
+        ? req.query.afterId
+        : undefined;
+
+    const products = await prisma.product.findMany({
+      where: {
+        status: 'ACTIVE',
+        weightGrams: null,
+        ...(afterId
+          ? {
+              id: {
+                gt: afterId,
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        description: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+      take: BATCH_SIZE,
+    });
+
     let updated = 0;
     let skipped = 0;
 
-    while (true) {
-      /*
-       * IMPORTANT:
-       *
-       * Always start from the first remaining product.
-       * Do not use a cursor here because products are being
-       * removed from the weightGrams:null result set as we update them.
-       */
-      const products = await prisma.product.findMany({
+    for (const product of products) {
+      const text =
+        `${product.name}\n${product.description || ''}`;
+
+      const weightGrams = extractWeight(text);
+
+      if (weightGrams === null) {
+        skipped++;
+        continue;
+      }
+
+      await prisma.product.update({
         where: {
-          status: 'ACTIVE',
-          weightGrams: null,
+          id: product.id,
         },
-        select: {
-          id: true,
-          sku: true,
-          name: true,
-          description: true,
+        data: {
+          weightGrams,
         },
-        orderBy: {
-          id: 'asc',
-        },
-        take: SCAN_BATCH,
       });
 
-      if (products.length === 0) {
-        break;
-      }
-
-      const updates: Array<{
-        id: string;
-        weightGrams: number;
-      }> = [];
-
-      for (const product of products) {
-        scanned++;
-
-        const text =
-          `${product.name}\n${product.description || ''}`;
-
-        const weightGrams = extractWeight(text);
-
-        if (weightGrams === null) {
-          skipped++;
-          continue;
-        }
-
-        updates.push({
-          id: product.id,
-          weightGrams,
-        });
-      }
-
-      /*
-       * Update in manageable transactions.
-       */
-      for (let i = 0; i < updates.length; i += UPDATE_BATCH) {
-        const batch = updates.slice(i, i + UPDATE_BATCH);
-
-        await prisma.$transaction(
-          batch.map((item) =>
-            prisma.product.update({
-              where: {
-                id: item.id,
-              },
-              data: {
-                weightGrams: item.weightGrams,
-              },
-            }),
-          ),
-        );
-
-        updated += batch.length;
-      }
-
-      console.log(
-        `Weight import progress: ` +
-          `${scanned.toLocaleString()} scanned, ` +
-          `${updated.toLocaleString()} updated, ` +
-          `${skipped.toLocaleString()} skipped`,
-      );
-
-      /*
-       * If fewer than SCAN_BATCH remain, we're finished.
-       */
-      if (products.length < SCAN_BATCH) {
-        break;
-      }
+      updated++;
     }
+
+    const lastProduct = products.at(-1);
 
     const remaining = await prisma.product.count({
       where: {
         status: 'ACTIVE',
         weightGrams: null,
-      },
-    });
-
-    const withWeight = await prisma.product.count({
-      where: {
-        status: 'ACTIVE',
-        weightGrams: {
-          not: null,
-        },
+        ...(lastProduct
+          ? {
+              id: {
+                gt: lastProduct.id,
+              },
+            }
+          : {}),
       },
     });
 
     res.json({
       success: true,
-      databaseModified: true,
-      scanned,
+      scanned: products.length,
       updated,
       skipped,
-      productsWithWeight: withWeight,
-      remainingProductsWithoutWeight: remaining,
+      lastId: lastProduct?.id ?? null,
+      remainingAfterThisBatch: remaining,
       message:
-        remaining > 0
-          ? 'Run again to continue.'
-          : 'All active products now have a weight.',
+        products.length === 0
+          ? 'No more products in this range.'
+          : 'Batch completed. Run again using lastId.',
     });
   }),
 );
