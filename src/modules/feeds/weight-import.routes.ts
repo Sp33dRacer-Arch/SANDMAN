@@ -56,128 +56,22 @@ function extractWeights(
   return matches;
 }
 
-function flattenSpecs(
-  value: unknown,
-  path = 'specs',
-): Array<{
-  path: string;
-  value: string;
-}> {
-  const output: Array<{
-    path: string;
-    value: string;
-  }> = [];
-
-  if (value === null || value === undefined) {
-    return output;
-  }
-
-  if (
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean'
-  ) {
-    output.push({
-      path,
-      value: String(value),
-    });
-
-    return output;
-  }
-
-  if (Array.isArray(value)) {
-    value.forEach((item, index) => {
-      output.push(
-        ...flattenSpecs(item, `${path}[${index}]`),
-      );
-    });
-
-    return output;
-  }
-
-  if (typeof value === 'object') {
-    for (const [key, child] of Object.entries(
-      value as Record<string, unknown>,
-    )) {
-      output.push(
-        ...flattenSpecs(child, `${path}.${key}`),
-      );
-    }
-  }
-
-  return output;
-}
-
-router.post(
-  '/import-product-weights',
+router.get(
+  '/find-product-weights',
   asyncHandler(async (req, res) => {
-    const DEFAULT_BATCH_SIZE = 1000;
-    const MAX_BATCH_SIZE = 1000;
+    const BATCH_SIZE = 1000;
+    const MAX_SCANNED = 20000;
+    const TARGET_MATCHES = 20;
 
-    const rawLimit = Number(req.query.limit);
-
-    const BATCH_SIZE =
-      Number.isFinite(rawLimit) && rawLimit > 0
-        ? Math.min(
-            Math.floor(rawLimit),
-            MAX_BATCH_SIZE,
-          )
-        : DEFAULT_BATCH_SIZE;
-
-    const afterId =
+    let cursor =
       typeof req.query.afterId === 'string'
         ? req.query.afterId
         : undefined;
 
-    const dryRun =
-      req.query.dryRun === 'true' ||
-      req.query.dryRun === '1';
+    let scanned = 0;
 
-    const diagnostic =
-      req.query.diagnostic === 'true' ||
-      req.query.diagnostic === '1';
-
-    const products = await prisma.product.findMany({
-      where: {
-        status: 'ACTIVE',
-        weightGrams: null,
-
-        ...(afterId
-          ? {
-              id: {
-                gt: afterId,
-              },
-            }
-          : {}),
-      },
-
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        description: true,
-        specs: true,
-        weightGrams: true,
-      },
-
-      orderBy: {
-        id: 'asc',
-      },
-
-      take: BATCH_SIZE,
-    });
-
-    let valid = 0;
-    let updated = 0;
-    let skipped = 0;
-
-    const sourceCounts = {
-      name: 0,
-      description: 0,
-      specs: 0,
-    };
-
-    const validExamples: Array<{
+    const matches: Array<{
+      id: string;
       sku: string;
       name: string;
       detected: string;
@@ -185,186 +79,123 @@ router.post(
       source: string;
     }> = [];
 
-    const specsExamples: Array<{
-      sku: string;
-      name: string;
-      path: string;
-      value: string;
-    }> = [];
-
-    const noWeightExamples: Array<{
-      sku: string;
-      name: string;
-      specsKeys: string[];
-    }> = [];
-
-    for (const product of products) {
-      const matches: WeightMatch[] = [];
-
-      matches.push(
-        ...extractWeights(
-          product.name,
-          'name',
-        ),
-      );
-
-      matches.push(
-        ...extractWeights(
-          product.description || '',
-          'description',
-        ),
-      );
-
-      const flattenedSpecs =
-        flattenSpecs(product.specs);
-
-      for (const item of flattenedSpecs) {
-        const specMatches = extractWeights(
-          item.value,
-          'specs',
-        );
-
-        matches.push(...specMatches);
-
-        if (
-          diagnostic &&
-          specMatches.length > 0 &&
-          specsExamples.length < 30
-        ) {
-          specsExamples.push({
-            sku: product.sku,
-            name: product.name,
-            path: item.path,
-            value: item.value,
-          });
-        }
-      }
-
-      const uniqueWeights = [
-        ...new Map(
-          matches.map((match) => [
-            `${match.grams}`,
-            match,
-          ]),
-        ).values(),
-      ];
-
-      if (uniqueWeights.length === 0) {
-        skipped++;
-
-        if (
-          diagnostic &&
-          noWeightExamples.length < 30
-        ) {
-          const specsKeys =
-            product.specs &&
-            typeof product.specs === 'object' &&
-            !Array.isArray(product.specs)
-              ? Object.keys(
-                  product.specs as Record<
-                    string,
-                    unknown
-                  >,
-                )
-              : [];
-
-          noWeightExamples.push({
-            sku: product.sku,
-            name: product.name,
-            specsKeys,
-          });
-        }
-
-        continue;
-      }
-
-      if (uniqueWeights.length > 1) {
-        skipped++;
-        continue;
-      }
-
-      const selected = uniqueWeights[0];
-
-      if (!selected) {
-        skipped++;
-        continue;
-      }
-
-      valid++;
-
-      sourceCounts[selected.source]++;
-
-      if (validExamples.length < 30) {
-        validExamples.push({
-          sku: product.sku,
-          name: product.name,
-          detected: selected.raw,
-          grams: selected.grams,
-          source: selected.source,
-        });
-      }
-
-      if (!dryRun) {
-        await prisma.product.update({
-          where: {
-            id: product.id,
-          },
-          data: {
-            weightGrams: selected.grams,
-          },
-        });
-
-        updated++;
-      }
-    }
-
-    const lastProduct = products.at(-1);
-
-    const remaining =
-      await prisma.product.count({
+    while (
+      scanned < MAX_SCANNED &&
+      matches.length < TARGET_MATCHES
+    ) {
+      const products = await prisma.product.findMany({
         where: {
           status: 'ACTIVE',
           weightGrams: null,
+
+          ...(cursor
+            ? {
+                id: {
+                  gt: cursor,
+                },
+              }
+            : {}),
         },
+
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          description: true,
+          specs: true,
+        },
+
+        orderBy: {
+          id: 'asc',
+        },
+
+        take: BATCH_SIZE,
       });
+
+      if (products.length === 0) {
+        break;
+      }
+
+      for (const product of products) {
+        scanned++;
+
+        const found: WeightMatch[] = [];
+
+        found.push(
+          ...extractWeights(
+            product.name,
+            'name',
+          ),
+        );
+
+        found.push(
+          ...extractWeights(
+            product.description || '',
+            'description',
+          ),
+        );
+
+        if (product.specs) {
+          const specsText =
+            JSON.stringify(product.specs);
+
+          found.push(
+            ...extractWeights(
+              specsText,
+              'specs',
+            ),
+          );
+        }
+
+        const first = found[0];
+
+        if (first) {
+          matches.push({
+            id: product.id,
+            sku: product.sku,
+            name: product.name,
+            detected: first.raw,
+            grams: first.grams,
+            source: first.source,
+          });
+
+          if (matches.length >= TARGET_MATCHES) {
+            break;
+          }
+        }
+      }
+
+      const last =
+        products[products.length - 1];
+
+      if (!last) {
+        break;
+      }
+
+      cursor = last.id;
+
+      if (products.length < BATCH_SIZE) {
+        break;
+      }
+    }
 
     res.json({
       success: true,
+      readOnly: true,
+      databaseModified: false,
 
-      dryRun,
-      diagnostic,
+      scanned,
 
-      databaseModified:
-        !dryRun && updated > 0,
+      matchesFound: matches.length,
 
-      scanned: products.length,
+      nextAfterId: cursor ?? null,
 
-      valid,
-      updated,
-      skipped,
+      matches,
 
-      detectedSources: sourceCounts,
-
-      lastId:
-        lastProduct?.id ?? null,
-
-      remainingProductsWithoutWeight:
-        remaining,
-
-      examples: {
-        valid: validExamples,
-
-        ...(diagnostic
-          ? {
-              specsMatches: specsExamples,
-              noWeight: noWeightExamples,
-            }
-          : {}),
-      },
-
-      message: dryRun
-        ? 'Dry run completed. No database changes were made.'
-        : 'Batch completed.',
+      message:
+        matches.length > 0
+          ? 'Found products containing weight-like values.'
+          : 'No weight-like values found within the scan range.',
     });
   }),
 );
