@@ -1,0 +1,52 @@
+SANDMAN V3.1.6 LEAN-STORAGE HARDENING — SCAN REPORT
+Date: 2026-09-09
+
+RESULT
+PASS at package/static compatibility-test level.
+
+PRIMARY FIX
+The live SANDMAN backend uses the legacy V2.6.1 `resumeVinyasaImportJob()` worker. Its FULL catalogue path passes:
+  maxProducts: remaining
+instead of declaring a modern `VINYASA_IMPORT_BATCH_PRODUCTS` batchSize.
+
+V3.1.6 now:
+- detects this legacy worker shape structurally
+- caps each FULL batch with VINYASA_LEAN_BATCH_PRODUCTS while lean mode is enabled
+- preserves the configured overall maxImportProducts safety ceiling
+- checks persisted importJobProcessed after each batch
+- keeps the job RUNNING when more feed remains below the overall ceiling
+- schedules the next resume batch after the current lease is released
+- leaves the existing IMAGES batch path separate
+- still supports the modern processVinyasaCatalogJobBatch worker
+
+COMPATIBILITY TESTS
+Modern worker generation:
+- apply: PASS
+- static lean audit: 26/26 PASS
+- second/idempotent apply: PASS
+- second audit: 26/26 PASS
+
+Legacy worker generation matching the user's current resumeVinyasaImportJob shape:
+- legacy starter storage guard: PASS
+- legacy per-batch storage guard: PASS
+- legacy lean batch-size declaration: PASS
+- maxProducts changed from remaining to the lean batch cap: PASS
+- continuation status uses persisted importJobProcessed vs maxImportProducts: PASS
+- RUNNING job schedules the next resume batch: PASS
+- static lean audit: 26/26 PASS
+- second/idempotent apply: PASS
+- second audit: 26/26 PASS
+- TypeScript/TSX syntax parse: 95 files, 0 parse diagnostics
+
+PACKAGE CHECKS
+- apply script Node syntax: PASS
+- static-audit Node syntax: PASS
+- no Prisma schema/migration file is included or targeted
+- no .env or secret file is included
+- no payment/order-submission setting is changed
+- patcher remains fail-closed and writes source only after final in-memory validation
+
+LOCAL VERIFICATION STILL REQUIRED
+The package intentionally runs the existing SANDMAN V3/V2.6.1 verifier after applying.
+Do not commit or deploy unless the final marker is:
+SANDMAN V3.1.6 lean-storage hardening verification passed.

@@ -65,6 +65,7 @@ const FEED_COLUMNS = [
   'color',
   'size',
   'google_product_category',
+'shipping_weight',
 ];
 
 feedsRouter.get(
@@ -126,11 +127,12 @@ feedsRouter.get(
           p.brand ?? '',
           '',
           p.manufacturerPn ?? '',
-          condition(p.condition),
-          '',
-          '',
-          '',
-          '',
+         condition(p.condition),
+'',
+'',
+'',
+'',
+p.weightGrams != null ? `${p.weightGrams} g` : '',
         ].map(tsv);
 
         res.write(row.join('\t') + '\n');

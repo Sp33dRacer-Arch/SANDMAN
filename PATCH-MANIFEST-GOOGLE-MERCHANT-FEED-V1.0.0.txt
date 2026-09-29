@@ -1,0 +1,8 @@
+SANDMAN GOOGLE MERCHANT FEED V1.0.0
+Files:
+- APPLY-GOOGLE-MERCHANT-FEED-V1.0.0.ps1
+- INSTALL-GOOGLE-MERCHANT-FEED-V1.0.0.txt
+- CHANGELOG-GOOGLE-MERCHANT-FEED-V1.0.0.md
+- PATCH-MANIFEST-GOOGLE-MERCHANT-FEED-V1.0.0.txt
+- scripts/apply-google-merchant-feed-v1.0.0.mjs
+- scripts/static-google-merchant-feed-v1.0.0-audit.mjs

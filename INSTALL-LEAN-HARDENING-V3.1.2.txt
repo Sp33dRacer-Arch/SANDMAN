@@ -1,0 +1,32 @@
+SANDMAN V3.1.2 LEAN-STORAGE HARDENING — FIXED
+
+Target workspace:
+C:\Users\asand\Downloads\SANDMAN-backend
+
+1. Extract this ZIP.
+2. Copy its contents into SANDMAN-backend (do not overwrite .env; this ZIP contains no .env).
+3. From SANDMAN-backend run:
+   powershell -ExecutionPolicy Bypass -File .\APPLY-LEAN-HARDENING-V3.1.2.ps1
+4. Do not commit/deploy unless the final message is:
+   SANDMAN V3.1.2 lean-storage hardening verification passed.
+
+This package is cumulative. It can patch the pre-lean V3 tree or repair the original V3.1 lean-storage patch if that was already applied.
+
+Default-on storage settings require no Railway variable changes:
+- VINYASA_LEAN_STORAGE_MODE=true
+- VINYASA_DB_SIZE_GUARD_MB=250
+- VINYASA_LEAN_BATCH_PRODUCTS=500
+
+Important V3.1.2 behavior:
+- Catalogue imports and image-repair jobs stop at the database safety limit.
+- STOCK_PRICE sync is intentionally NOT blocked by the size guard, so customer-facing inventory and pricing can still refresh safely.
+- Supplier lastSyncedAt gets a bounded six-hour heartbeat even when product data is unchanged.
+- Anonymous product views remain write-free but still return 404 for missing/inactive products.
+- Signed-in recently-viewed history is pruned to the newest 50 rows with no 200-row cleanup ceiling.
+
+Keep VINYASA_AUTO_SYNC_ENABLED=false until this patch is verified, committed and deployed.
+
+Do not run prisma migrate reset to solve an unrelated migration-history drift without first confirming the correct migration chain and backing up the database.
+
+V3.1.2 COMPATIBILITY NOTE
+The legacy Vinyasa SEO cleanup marker may already be absent on a valid V3 backend. V3.1.2 treats that state as already clean instead of aborting. Critical safety markers are still required and will stop installation if missing.

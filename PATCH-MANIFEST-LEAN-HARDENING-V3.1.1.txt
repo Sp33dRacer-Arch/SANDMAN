@@ -1,0 +1,19 @@
+SANDMAN V3.1.1 lean-storage hardening — fixed patch manifest
+
+Files added by package:
+- APPLY-LEAN-HARDENING-V3.1.1.ps1
+- VERIFY-LEAN-HARDENING-V3.1.1.ps1
+- CHANGELOG-LEAN-HARDENING-V3.1.1.md
+- INSTALL-LEAN-HARDENING-V3.1.1.txt
+- PATCH-MANIFEST-LEAN-HARDENING-V3.1.1.txt
+- LEAN-HARDENING-V3.1.1-SCAN-REPORT.txt
+- scripts/apply-lean-hardening-v3.1.1.mjs
+- scripts/static-lean-hardening-v3.1.1-audit.mjs
+
+Files modified by patcher:
+- src/config/env.ts
+- src/services/vinyasa.service.ts
+- src/services/supplier-inventory.service.ts
+- src/modules/experience/experience.routes.ts
+
+No migration, .env, secret, payment config, supplier-order setting, dependency, or media asset is included.

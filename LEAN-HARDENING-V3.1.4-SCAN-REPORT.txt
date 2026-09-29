@@ -1,0 +1,25 @@
+SANDMAN V3.1.4 LEAN-STORAGE HARDENING — STATIC SCAN
+
+STATUS: READY FOR LOCAL VERIFY
+
+Compatibility fixes verified:
+- function-name structural patching instead of one exact Vinyasa worker signature
+- modern startVinyasaCatalogJob/processVinyasaCatalogJobBatch worker supported
+- legacy startVinyasaImportJob/resumeVinyasaImportJob worker supported
+- FULL catalogue growth guarded at start and per background batch
+- STOCK_PRICE direct/background synchronization remains allowed under storage pressure
+- image repair guarded at start and per batch
+- idempotent second-run behavior
+
+Package checks performed before release:
+- Node syntax check for patcher/audit: PASS
+- reconstructed V2.5 -> V2.6.1 -> 5M/Vinyasa -> Storefront/SEO V3 tree: PASS
+- modern worker V3.1.4 apply: PASS
+- modern worker lean-storage audit: PASS 26/26
+- modern worker immediate second application: PASS, zero duplicate changes
+- legacy worker compatibility apply: PASS
+- legacy worker lean-storage audit: PASS 26/26
+- legacy worker immediate second application: PASS, zero duplicate changes
+- TypeScript/TSX syntax parse on both test trees: PASS, 96 files / 0 syntax diagnostics each
+
+The user's dependency-backed existing SANDMAN verifier still runs during APPLY and must pass before deployment.

@@ -1,0 +1,13 @@
+SANDMAN V3.1.2 LEAN-STORAGE HARDENING — INSTALLER COMPATIBILITY FIX
+
+Static package result: PASS.
+
+Fix verified:
+- optional legacy Vinyasa SEO cleanup no longer requires a pre-existing exact source marker
+- optional cleanup remains internally all-or-nothing if present
+- critical storage/stock/view/history fixes remain fail-closed
+- Node syntax checks pass for patcher and audit
+- package contains no .env, Prisma schema, or migration files
+
+Still required on the user's real backend:
+Run APPLY-LEAN-HARDENING-V3.1.2.ps1 and do not deploy unless the existing full SANDMAN verifier also passes.

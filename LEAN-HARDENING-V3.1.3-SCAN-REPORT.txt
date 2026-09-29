@@ -1,0 +1,20 @@
+SANDMAN V3.1.3 LEAN-STORAGE HARDENING — STATIC SCAN
+
+STATUS: READY FOR LOCAL VERIFY
+
+Compatibility fixes:
+- structural storage-guard insertion instead of exact whole-block matching
+- V5 money-unit image-repair shape supported
+- pre-sync formatting differences supported
+- FULL background jobs guarded; STOCK_PRICE background jobs remain allowed
+- idempotent second-run behavior verified
+
+Package checks performed before release:
+- Node syntax check: PASS
+- reconstructed SANDMAN V2.5 -> V2.6.1 -> 5M/Vinyasa -> Storefront/SEO V3 application: PASS
+- V3.1.3 patch application on reconstructed tree: PASS
+- immediate second V3.1.3 patch application: PASS with no duplicate changes
+- static lean-storage audit: PASS
+- ZIP integrity: PASS
+
+The user's dependency-backed SANDMAN verifier still runs during APPLY and must pass before deployment.

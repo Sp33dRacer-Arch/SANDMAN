@@ -1,0 +1,47 @@
+SANDMAN GOOGLE MERCHANT FEED V1.0.0 — INSTALL
+
+What this adds:
+A new route, src/modules/feeds/feeds.routes.ts, that serves your live
+product catalog as a Google Merchant Center feed at
+/feeds/google-merchant.txt. It reads your real prisma/schema.prisma to map
+your actual field names (title, price, stock, images, brand, gtin, styles),
+reuses your existing prisma client and asyncHandler helper instead of
+creating new ones, and tries to wire itself into your app next to your
+existing experienceRouter.
+
+It never touches Prisma schema/migrations, .env, secrets, payment settings,
+or supplier-order settings, and it never overwrites an existing
+feeds.routes.ts unless you pass -Force.
+
+1. Extract this ZIP outside the backend folder.
+2. Copy the extracted files into SANDMAN-backend without replacing .env,
+   .git or node_modules.
+3. From the backend root run:
+
+powershell -ExecutionPolicy Bypass -File .\APPLY-GOOGLE-MERCHANT-FEED-V1.0.0.ps1
+
+4. Read the console output carefully. It tells you:
+   - exactly which Product (and, if present, variant/style) fields it
+     detected and used
+   - which style/variant mode it picked and why
+   - whether it could auto-wire the route into your app, or whether you
+     need to add two lines yourself
+5. Do not commit or deploy unless the final line is:
+SANDMAN Google Merchant feed V1.0.0 install checks passed.
+6. Open src/modules/feeds/feeds.routes.ts and set the two TODOs near the
+   top: CURRENCY and SITE_URL.
+7. Start your dev server and open http://localhost:<port>/feeds/google-merchant.txt.
+   Check a few real rows by eye — title, price, image_link and availability
+   should all look right.
+8. Only once that looks right, register the URL in Google Merchant Center
+   as a Scheduled fetch source (see the step-by-step Claude gave you in
+   chat), and deploy so the URL is publicly reachable over HTTPS.
+
+If a field mapping looks wrong (e.g. picked the wrong price field, or
+google_product_category is blank because your schema has no matching
+field), open feeds.routes.ts directly and adjust it by hand — it's a plain
+readable file, not something you need to re-run the installer for.
+
+To regenerate after a schema change:
+node .\scripts\apply-google-merchant-feed-v1.0.0.mjs --force
+(or run the .ps1 with -Force)

@@ -1,0 +1,13 @@
+SANDMAN V3.1.2 LEAN-STORAGE HARDENING FIXED DIRECT
+
+Files:
+- APPLY-LEAN-HARDENING-V3.1.2.ps1
+- VERIFY-LEAN-HARDENING-V3.1.2.ps1
+- INSTALL-LEAN-HARDENING-V3.1.2.txt
+- CHANGELOG-LEAN-HARDENING-V3.1.2.md
+- LEAN-HARDENING-V3.1.2-SCAN-REPORT.txt
+- PATCH-MANIFEST-LEAN-HARDENING-V3.1.2.txt
+- scripts/apply-lean-hardening-v3.1.2.mjs
+- scripts/static-lean-hardening-v3.1.2-audit.mjs
+
+No .env, secret, Prisma schema, or migration file is included.

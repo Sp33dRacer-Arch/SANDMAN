@@ -1,0 +1,30 @@
+SANDMAN V3.1.1 LEAN-STORAGE HARDENING — FIXED SOURCE/STATIC SCAN
+Date: 2026-09-09
+
+STATUS: READY FOR LOCAL DEPENDENCY-BACKED VERIFY. DO NOT DEPLOY UNTIL THE USER'S FULL SANDMAN VERIFIER PASSES.
+
+Corrections made from V3.1:
+- FIXED: database-size guard no longer blocks STOCK_PRICE synchronization
+- FIXED: anonymous product views validate ACTIVE product existence before write-free 204
+- FIXED: SupplierProduct.lastSyncedAt cannot remain indefinitely stale on unchanged successful syncs; six-hour heartbeat added
+- FIXED: recently-viewed cleanup has no 200-row ceiling and prunes to newest 50
+- FIXED: static audit checks real behavior instead of a hard-coded migration PASS
+- FIXED: original V3.1-applied workspaces can be repaired by the cumulative patcher
+
+Preserved safeguards:
+- no Vinyasa rawData payload persistence
+- no duplicate importer-generated SEO persistence
+- 250 MB default database-size guard for catalogue/image growth
+- 500-product lean background batches
+- conditional stock writes and sparse product updates
+- unchanged product images and supplier fitments avoid churn
+- no Prisma migration, .env, secret, payment, order-submission, dependency, or media change
+
+Package-level checks performed before packaging:
+- ZIP source tree inspected
+- Node syntax checks for both .mjs scripts
+- marker/logic regression scan for the four corrected findings
+- trailing-whitespace scan
+- ZIP integrity test
+
+The APPLY script also runs the existing full SANDMAN V3/V2.6.1 verifier on the user's actual backend.

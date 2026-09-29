@@ -1,0 +1,15 @@
+SANDMAN V3.1.4 LEAN-STORAGE HARDENING — INSTALL
+
+Target project:
+C:\Users\asand\Downloads\SANDMAN-backend
+
+1. Extract this ZIP outside the backend folder.
+2. Copy the extracted files into SANDMAN-backend without replacing .env, .git or node_modules.
+3. From the backend root run:
+
+powershell -ExecutionPolicy Bypass -File .\APPLY-LEAN-HARDENING-V3.1.4.ps1
+
+4. Do not commit or deploy unless the final line is:
+SANDMAN V3.1.4 lean-storage hardening verification passed.
+
+V3.1.4 supersedes V3.1.1, V3.1.2 and V3.1.3. Do not run the older lean-storage installers again.
