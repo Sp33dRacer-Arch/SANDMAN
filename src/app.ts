@@ -42,6 +42,8 @@ import { adminVinyasaRouter, vinyasaIntegrationRouter } from './modules/vinyasa/
 import { prisma } from './lib/prisma';
 import { asyncHandler } from './lib/async-handler';
 import { buildProductSeo, safeJsonLd, websiteStructuredData } from './services/storefront-seo.service';
+import { weightScanRouter } from './modules/feeds/weight-scan.routes';
+
 
 export const app = express();
 
@@ -376,6 +378,7 @@ app.use('/api/admin/suppliers', suppliersRouter);
 app.use('/api/experience', experienceRouter);
 app.use('/feeds', feedsRouter);
 app.use('/debug', weightsDebugRouter);
+app.use('/debug', weightScanRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/builds', buildsRouter);
 app.use('/api/community', communityRouter);
