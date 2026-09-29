@@ -7,14 +7,13 @@ const router = Router();
 type WeightMatch = {
   raw: string;
   grams: number;
+  source: 'name' | 'description' | 'specs';
 };
 
-type DiagnosticReason =
-  | 'valid'
-  | 'no_weight'
-  | 'multiple_weights';
-
-function extractWeights(text: string): WeightMatch[] {
+function extractWeights(
+  text: string,
+  source: WeightMatch['source'],
+): WeightMatch[] {
   const matches: WeightMatch[] = [];
 
   const regex =
@@ -50,38 +49,63 @@ function extractWeights(text: string): WeightMatch[] {
     matches.push({
       raw: match[0],
       grams: Math.round(grams),
+      source,
     });
   }
 
   return matches;
 }
 
-function getUniqueWeights(matches: WeightMatch[]): WeightMatch[] {
-  const unique = new Map<number, WeightMatch>();
+function flattenSpecs(
+  value: unknown,
+  path = 'specs',
+): Array<{
+  path: string;
+  value: string;
+}> {
+  const output: Array<{
+    path: string;
+    value: string;
+  }> = [];
 
-  for (const match of matches) {
-    if (!unique.has(match.grams)) {
-      unique.set(match.grams, match);
+  if (value === null || value === undefined) {
+    return output;
+  }
+
+  if (
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    output.push({
+      path,
+      value: String(value),
+    });
+
+    return output;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => {
+      output.push(
+        ...flattenSpecs(item, `${path}[${index}]`),
+      );
+    });
+
+    return output;
+  }
+
+  if (typeof value === 'object') {
+    for (const [key, child] of Object.entries(
+      value as Record<string, unknown>,
+    )) {
+      output.push(
+        ...flattenSpecs(child, `${path}.${key}`),
+      );
     }
   }
 
-  return [...unique.values()];
-}
-
-function getDiagnosticReason(
-  matches: WeightMatch[],
-): DiagnosticReason {
-  const uniqueWeights = getUniqueWeights(matches);
-
-  if (uniqueWeights.length === 0) {
-    return 'no_weight';
-  }
-
-  if (uniqueWeights.length > 1) {
-    return 'multiple_weights';
-  }
-
-  return 'valid';
+  return output;
 }
 
 router.post(
@@ -94,7 +118,10 @@ router.post(
 
     const BATCH_SIZE =
       Number.isFinite(rawLimit) && rawLimit > 0
-        ? Math.min(Math.floor(rawLimit), MAX_BATCH_SIZE)
+        ? Math.min(
+            Math.floor(rawLimit),
+            MAX_BATCH_SIZE,
+          )
         : DEFAULT_BATCH_SIZE;
 
     const afterId =
@@ -114,6 +141,7 @@ router.post(
       where: {
         status: 'ACTIVE',
         weightGrams: null,
+
         ...(afterId
           ? {
               id: {
@@ -122,106 +150,157 @@ router.post(
             }
           : {}),
       },
+
       select: {
         id: true,
         sku: true,
         name: true,
         description: true,
+        specs: true,
         weightGrams: true,
       },
+
       orderBy: {
         id: 'asc',
       },
+
       take: BATCH_SIZE,
     });
 
+    let valid = 0;
     let updated = 0;
     let skipped = 0;
-    let valid = 0;
-    let noWeight = 0;
-    let multipleWeights = 0;
+
+    const sourceCounts = {
+      name: 0,
+      description: 0,
+      specs: 0,
+    };
 
     const validExamples: Array<{
-      id: string;
       sku: string;
       name: string;
       detected: string;
       grams: number;
+      source: string;
+    }> = [];
+
+    const specsExamples: Array<{
+      sku: string;
+      name: string;
+      path: string;
+      value: string;
     }> = [];
 
     const noWeightExamples: Array<{
-      id: string;
       sku: string;
       name: string;
-    }> = [];
-
-    const multipleWeightExamples: Array<{
-      id: string;
-      sku: string;
-      name: string;
-      detected: string[];
-      grams: number[];
+      specsKeys: string[];
     }> = [];
 
     for (const product of products) {
-      const text =
-        `${product.name}\n${product.description || ''}`;
+      const matches: WeightMatch[] = [];
 
-      const matches = extractWeights(text);
-      const uniqueWeights = getUniqueWeights(matches);
-      const reason = getDiagnosticReason(matches);
+      matches.push(
+        ...extractWeights(
+          product.name,
+          'name',
+        ),
+      );
 
-      if (reason === 'no_weight') {
-        noWeight++;
-        skipped++;
+      matches.push(
+        ...extractWeights(
+          product.description || '',
+          'description',
+        ),
+      );
 
-        if (diagnostic && noWeightExamples.length < 20) {
-          noWeightExamples.push({
-            id: product.id,
+      const flattenedSpecs =
+        flattenSpecs(product.specs);
+
+      for (const item of flattenedSpecs) {
+        const specMatches = extractWeights(
+          item.value,
+          'specs',
+        );
+
+        matches.push(...specMatches);
+
+        if (
+          diagnostic &&
+          specMatches.length > 0 &&
+          specsExamples.length < 30
+        ) {
+          specsExamples.push({
             sku: product.sku,
             name: product.name,
+            path: item.path,
+            value: item.value,
           });
         }
-
-        continue;
       }
 
-      if (reason === 'multiple_weights') {
-        multipleWeights++;
+      const uniqueWeights = [
+        ...new Map(
+          matches.map((match) => [
+            `${match.grams}`,
+            match,
+          ]),
+        ).values(),
+      ];
+
+      if (uniqueWeights.length === 0) {
         skipped++;
 
         if (
           diagnostic &&
-          multipleWeightExamples.length < 20
+          noWeightExamples.length < 30
         ) {
-          multipleWeightExamples.push({
-            id: product.id,
+          const specsKeys =
+            product.specs &&
+            typeof product.specs === 'object' &&
+            !Array.isArray(product.specs)
+              ? Object.keys(
+                  product.specs as Record<
+                    string,
+                    unknown
+                  >,
+                )
+              : [];
+
+          noWeightExamples.push({
             sku: product.sku,
             name: product.name,
-            detected: matches.map((match) => match.raw),
-            grams: matches.map((match) => match.grams),
+            specsKeys,
           });
         }
 
         continue;
       }
 
-      const selectedWeight = uniqueWeights[0];
+      if (uniqueWeights.length > 1) {
+        skipped++;
+        continue;
+      }
 
-      if (!selectedWeight) {
+      const selected = uniqueWeights[0];
+
+      if (!selected) {
         skipped++;
         continue;
       }
 
       valid++;
 
-      if (validExamples.length < 20) {
+      sourceCounts[selected.source]++;
+
+      if (validExamples.length < 30) {
         validExamples.push({
-          id: product.id,
           sku: product.sku,
           name: product.name,
-          detected: selectedWeight.raw,
-          grams: selectedWeight.grams,
+          detected: selected.raw,
+          grams: selected.grams,
+          source: selected.source,
         });
       }
 
@@ -231,7 +310,7 @@ router.post(
             id: product.id,
           },
           data: {
-            weightGrams: selectedWeight.grams,
+            weightGrams: selected.grams,
           },
         });
 
@@ -241,19 +320,13 @@ router.post(
 
     const lastProduct = products.at(-1);
 
-    const remaining = await prisma.product.count({
-      where: {
-        status: 'ACTIVE',
-        weightGrams: null,
-        ...(lastProduct
-          ? {
-              id: {
-                gt: lastProduct.id,
-              },
-            }
-          : {}),
-      },
-    });
+    const remaining =
+      await prisma.product.count({
+        where: {
+          status: 'ACTIVE',
+          weightGrams: null,
+        },
+      });
 
     res.json({
       success: true,
@@ -261,7 +334,8 @@ router.post(
       dryRun,
       diagnostic,
 
-      databaseModified: !dryRun && updated > 0,
+      databaseModified:
+        !dryRun && updated > 0,
 
       scanned: products.length,
 
@@ -269,32 +343,28 @@ router.post(
       updated,
       skipped,
 
-      skipReasons: {
-        noWeight,
-        multipleWeights,
-      },
+      detectedSources: sourceCounts,
 
-      lastId: lastProduct?.id ?? null,
+      lastId:
+        lastProduct?.id ?? null,
 
-      remainingAfterThisBatch: remaining,
+      remainingProductsWithoutWeight:
+        remaining,
 
       examples: {
         valid: validExamples,
 
         ...(diagnostic
           ? {
+              specsMatches: specsExamples,
               noWeight: noWeightExamples,
-              multipleWeights: multipleWeightExamples,
             }
           : {}),
       },
 
-      message:
-        products.length === 0
-          ? 'No more products in this range.'
-          : dryRun
-            ? 'Dry run completed. No database changes were made.'
-            : 'Batch completed. Run again using lastId.',
+      message: dryRun
+        ? 'Dry run completed. No database changes were made.'
+        : 'Batch completed.',
     });
   }),
 );
