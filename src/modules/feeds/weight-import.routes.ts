@@ -30,6 +30,24 @@ function extractWeights(
 
     if (!Number.isFinite(value) || value <= 0) continue;
 
+    // Reject compact product/part codes such as 5788G, 9705G, 6822G.
+    if (
+      unit === 'g' &&
+      /^\d+(?:\.\d+)?\s*g$/i.test(match[0]) === false
+    ) {
+      continue;
+    }
+
+    // If the value is immediately attached to G with no decimal/space,
+    // treat large values as product codes rather than gram weights.
+    if (
+      unit === 'g' &&
+      value >= 100 &&
+      /^\d+g$/i.test(match[0].trim())
+    ) {
+      continue;
+    }
+
     let grams: number;
 
     if (unit === 'kg' || unit.startsWith('kilogram')) {
@@ -57,11 +75,9 @@ function extractWeights(
 }
 
 router.get(
-  '/find-product-weights',
+  '/import-product-weights',
   asyncHandler(async (req, res) => {
-    const BATCH_SIZE = 1000;
-    const MAX_SCANNED = 20000;
-    const TARGET_MATCHES = 20;
+    const BATCH_SIZE = 500;
 
     let cursor =
       typeof req.query.afterId === 'string'
@@ -69,9 +85,10 @@ router.get(
         : undefined;
 
     let scanned = 0;
+    let updated = 0;
+    let skipped = 0;
 
-    const matches: Array<{
-      id: string;
+    const examples: Array<{
       sku: string;
       name: string;
       detected: string;
@@ -79,10 +96,7 @@ router.get(
       source: string;
     }> = [];
 
-    while (
-      scanned < MAX_SCANNED &&
-      matches.length < TARGET_MATCHES
-    ) {
+    while (true) {
       const products = await prisma.product.findMany({
         where: {
           status: 'ACTIVE',
@@ -112,9 +126,7 @@ router.get(
         take: BATCH_SIZE,
       });
 
-      if (products.length === 0) {
-        break;
-      }
+      if (products.length === 0) break;
 
       for (const product of products) {
         scanned++;
@@ -122,10 +134,7 @@ router.get(
         const found: WeightMatch[] = [];
 
         found.push(
-          ...extractWeights(
-            product.name,
-            'name',
-          ),
+          ...extractWeights(product.name, 'name'),
         );
 
         found.push(
@@ -136,66 +145,76 @@ router.get(
         );
 
         if (product.specs) {
-          const specsText =
-            JSON.stringify(product.specs);
-
           found.push(
             ...extractWeights(
-              specsText,
+              JSON.stringify(product.specs),
               'specs',
             ),
           );
         }
 
+        /*
+         * Only use the first detected weight.
+         * Products with no detected weight are skipped.
+         */
         const first = found[0];
 
-        if (first) {
-          matches.push({
+        if (!first) {
+          skipped++;
+          continue;
+        }
+
+        await prisma.product.update({
+          where: {
             id: product.id,
+          },
+          data: {
+            weightGrams: first.grams,
+          },
+        });
+
+        updated++;
+
+        if (examples.length < 20) {
+          examples.push({
             sku: product.sku,
             name: product.name,
             detected: first.raw,
             grams: first.grams,
             source: first.source,
           });
-
-          if (matches.length >= TARGET_MATCHES) {
-            break;
-          }
         }
       }
 
-      const last =
-        products[products.length - 1];
+      const last = products[products.length - 1];
 
-      if (!last) {
-        break;
-      }
+      if (!last) break;
 
       cursor = last.id;
 
-      if (products.length < BATCH_SIZE) {
-        break;
-      }
+      if (products.length < BATCH_SIZE) break;
     }
+
+    const remaining = await prisma.product.count({
+      where: {
+        status: 'ACTIVE',
+        weightGrams: null,
+      },
+    });
 
     res.json({
       success: true,
-      readOnly: true,
-      databaseModified: false,
-
+      databaseModified: true,
       scanned,
-
-      matchesFound: matches.length,
-
-      nextAfterId: cursor ?? null,
-
-      matches,
-
+      updated,
+      skipped,
+      remainingProductsWithoutWeight: remaining,
+      lastId: cursor ?? null,
+      examples,
       message:
-        matches.length > 0
-          ? 'Found products containing weight-like values.'
-          : 'No weight-like values found within the scan range.',
+        remaining > 0
+          ? 'Batch completed. Run again to continue.'
+          : 'All active products now have weights.',
     });
   }),
 );
