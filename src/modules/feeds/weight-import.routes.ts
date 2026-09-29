@@ -5,8 +5,8 @@ import { asyncHandler } from '../../lib/async-handler';
 const router = Router();
 
 function extractWeight(text: string): number | null {
-  // Intentionally ignore bare "g"/"G" because automotive descriptions
-  // commonly use G for product/spec designations.
+  // Ignore bare "g"/"G" because automotive specs often use G
+  // for things that are NOT product weight.
   const regex =
     /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|grams?|lb|lbs|pounds?)(?![a-z])/gi;
 
@@ -45,8 +45,6 @@ function extractWeight(text: string): number | null {
 
   const uniqueWeights = [...new Set(weights)];
 
-  // Only automatically import if there is exactly ONE weight
-  // in the product data.
   if (uniqueWeights.length !== 1) {
     return null;
   }
@@ -57,66 +55,95 @@ function extractWeight(text: string): number | null {
 router.post(
   '/import-product-weights',
   asyncHandler(async (_req, res) => {
-    const LIMIT = 500;
+    const SCAN_BATCH = 5000;
+    const UPDATE_BATCH = 500;
 
-    const products = await prisma.product.findMany({
-      where: {
-        status: 'ACTIVE',
-        weightGrams: null,
-      },
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        description: true,
-      },
-      orderBy: {
-        id: 'asc',
-      },
-      take: LIMIT,
-    });
+    let cursor: string | undefined;
 
+    let scanned = 0;
     let updated = 0;
     let skipped = 0;
 
-    const updates: Array<{
-      id: string;
-      weightGrams: number;
-    }> = [];
+    while (true) {
+      const products = await prisma.product.findMany({
+        where: {
+          status: 'ACTIVE',
+          weightGrams: null,
+        },
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          description: true,
+        },
+        orderBy: {
+          id: 'asc',
+        },
+        take: SCAN_BATCH,
+        ...(cursor
+          ? {
+              skip: 1,
+              cursor: {
+                id: cursor,
+              },
+            }
+          : {}),
+      });
 
-    for (const product of products) {
-      const text = `${product.name}\n${product.description || ''}`;
+      if (products.length === 0) break;
 
-      const weightGrams = extractWeight(text);
+      const updates: Array<{
+        id: string;
+        weightGrams: number;
+      }> = [];
 
-      if (weightGrams === null) {
-        skipped++;
-        continue;
+      for (const product of products) {
+        scanned++;
+
+        const text = `${product.name}\n${product.description || ''}`;
+        const weightGrams = extractWeight(text);
+
+        if (weightGrams === null) {
+          skipped++;
+          continue;
+        }
+
+        updates.push({
+          id: product.id,
+          weightGrams,
+        });
       }
 
-      updates.push({
-        id: product.id,
-        weightGrams,
-      });
-    }
+      for (let i = 0; i < updates.length; i += UPDATE_BATCH) {
+        const batch = updates.slice(i, i + UPDATE_BATCH);
 
-    // Update in one database transaction instead of thousands
-    // of separate requests.
-    if (updates.length > 0) {
-      await prisma.$transaction(
-        updates.map((item) =>
-          prisma.product.update({
-            where: {
-              id: item.id,
-            },
-            data: {
-              weightGrams: item.weightGrams,
-            },
-          }),
-        ),
+        await prisma.$transaction(
+          batch.map((item) =>
+            prisma.product.update({
+              where: {
+                id: item.id,
+              },
+              data: {
+                weightGrams: item.weightGrams,
+              },
+            }),
+          ),
+        );
+
+        updated += batch.length;
+      }
+
+      const last = products[products.length - 1];
+
+      if (!last) break;
+
+      cursor = last.id;
+
+      console.log(
+        `Weight import: ${scanned} scanned, ${updated} updated, ${skipped} skipped`,
       );
 
-      updated = updates.length;
+      if (products.length < SCAN_BATCH) break;
     }
 
     const remaining = await prisma.product.count({
@@ -129,14 +156,14 @@ router.post(
     res.json({
       success: true,
       databaseModified: true,
-      processed: products.length,
+      scanned,
       updated,
       skipped,
       remainingProductsWithoutWeight: remaining,
       message:
         remaining > 0
-          ? 'Run this endpoint again to process the next batch.'
-          : 'All eligible products have been processed.',
+          ? 'Run again to continue.'
+          : 'Finished processing all active products.',
     });
   }),
 );
