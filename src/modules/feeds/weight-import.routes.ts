@@ -4,13 +4,16 @@ import { asyncHandler } from '../../lib/async-handler';
 
 const router = Router();
 
-function extractWeight(text: string): number | null {
-  const weights: number[] = [];
+function extractWeights(text: string) {
+  const matches: Array<{
+    raw: string;
+    grams: number;
+  }> = [];
 
-  const explicitRegex =
-    /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|grams?|lb|lbs|pounds?)(?![a-z])/gi;
+  const regex =
+    /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|g|grams?|lb|lbs|pounds?)(?![a-z])/gi;
 
-  for (const match of text.matchAll(explicitRegex)) {
+  for (const match of text.matchAll(regex)) {
     const valueText = match[1];
     const unitText = match[2];
 
@@ -35,125 +38,162 @@ function extractWeight(text: string): number | null {
       grams = value;
     }
 
-    if (grams > 0 && grams <= 100000) {
-      weights.push(Math.round(grams));
-    }
+    if (grams <= 0 || grams > 100000) continue;
+
+    matches.push({
+      raw: match[0],
+      grams: Math.round(grams),
+    });
   }
 
-  const compactGramRegex =
-    /(\d+(?:\.\d+)?)\s*g(?![a-zA-Z])/g;
-
-  for (const match of text.matchAll(compactGramRegex)) {
-    const valueText = match[1];
-
-    if (!valueText) continue;
-
-    const value = Number(valueText);
-
-    if (
-      Number.isFinite(value) &&
-      value > 0 &&
-      value <= 100000
-    ) {
-      weights.push(Math.round(value));
-    }
-  }
-
-  const uniqueWeights = [...new Set(weights)];
-
-  if (uniqueWeights.length !== 1) {
-    return null;
-  }
-
-  return uniqueWeights[0] ?? null;
+  return matches;
 }
 
 router.post(
   '/import-product-weights',
   asyncHandler(async (req, res) => {
-    const BATCH_SIZE = 1000;
+    const SCAN_BATCH_SIZE = 1000;
 
-    const afterId =
+    // Stop this HTTP request after enough work has been done.
+    // This prevents Railway timeouts.
+    const MAX_SCANNED_PER_REQUEST = 10000;
+    const MAX_UPDATES_PER_REQUEST = 1000;
+
+    let scanned = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    let cursor =
       typeof req.query.afterId === 'string'
         ? req.query.afterId
         : undefined;
 
-    const products = await prisma.product.findMany({
-      where: {
-        status: 'ACTIVE',
-        weightGrams: null,
-        ...(afterId
-          ? {
-              id: {
-                gt: afterId,
-              },
-            }
-          : {}),
-      },
-      select: {
-        id: true,
-        sku: true,
-        name: true,
-        description: true,
-      },
-      orderBy: {
-        id: 'asc',
-      },
-      take: BATCH_SIZE,
-    });
+    let lastScannedId: string | undefined;
 
-    let updated = 0;
-    let skipped = 0;
-
-    for (const product of products) {
-      const text =
-        `${product.name}\n${product.description || ''}`;
-
-      const weightGrams = extractWeight(text);
-
-      if (weightGrams === null) {
-        skipped++;
-        continue;
-      }
-
-      await prisma.product.update({
+    while (
+      scanned < MAX_SCANNED_PER_REQUEST &&
+      updated < MAX_UPDATES_PER_REQUEST
+    ) {
+      const products = await prisma.product.findMany({
         where: {
-          id: product.id,
+          status: 'ACTIVE',
+          weightGrams: null,
+
+          ...(cursor
+            ? {
+                id: {
+                  gt: cursor,
+                },
+              }
+            : {}),
         },
-        data: {
-          weightGrams,
+
+        select: {
+          id: true,
+          sku: true,
+          name: true,
+          description: true,
         },
+
+        orderBy: {
+          id: 'asc',
+        },
+
+        take: SCAN_BATCH_SIZE,
       });
 
-      updated++;
-    }
+      if (products.length === 0) {
+        break;
+      }
 
-    const lastProduct = products.at(-1);
+      for (const product of products) {
+        scanned++;
+        lastScannedId = product.id;
+
+        const text =
+          `${product.name}\n${product.description || ''}`;
+
+        const matches = extractWeights(text);
+
+        /*
+         * IMPORTANT:
+         *
+         * Use the FIRST detected weight, exactly like
+         * the read-only scanner.
+         *
+         * Do NOT reject products merely because multiple
+         * weight-looking values exist.
+         */
+        const first = matches[0];
+
+        if (!first) {
+          skipped++;
+          continue;
+        }
+
+        await prisma.product.update({
+          where: {
+            id: product.id,
+          },
+          data: {
+            weightGrams: first.grams,
+          },
+        });
+
+        updated++;
+
+        if (updated >= MAX_UPDATES_PER_REQUEST) {
+          break;
+        }
+
+        if (scanned >= MAX_SCANNED_PER_REQUEST) {
+          break;
+        }
+      }
+
+      if (products.length < SCAN_BATCH_SIZE) {
+        break;
+      }
+
+      if (!lastScannedId) {
+        break;
+      }
+
+      cursor = lastScannedId;
+    }
 
     const remaining = await prisma.product.count({
       where: {
         status: 'ACTIVE',
         weightGrams: null,
-        ...(lastProduct
-          ? {
-              id: {
-                gt: lastProduct.id,
-              },
-            }
-          : {}),
+      },
+    });
+
+    const withWeight = await prisma.product.count({
+      where: {
+        status: 'ACTIVE',
+        weightGrams: {
+          not: null,
+        },
       },
     });
 
     res.json({
       success: true,
-      scanned: products.length,
+      databaseModified: updated > 0,
+
+      scanned,
       updated,
       skipped,
-      lastId: lastProduct?.id ?? null,
-      remainingAfterThisBatch: remaining,
+
+      productsWithWeight: withWeight,
+      remainingProductsWithoutWeight: remaining,
+
+      lastId: lastScannedId ?? null,
+
       message:
-        products.length === 0
-          ? 'No more products in this range.'
+        remaining === 0
+          ? 'All active products now have weights.'
           : 'Batch completed. Run again using lastId.',
     });
   }),
