@@ -4,11 +4,18 @@ import { asyncHandler } from '../../lib/async-handler';
 
 const router = Router();
 
-function extractWeights(text: string) {
-  const matches: Array<{
-    raw: string;
-    grams: number;
-  }> = [];
+type WeightMatch = {
+  raw: string;
+  grams: number;
+};
+
+type DiagnosticReason =
+  | 'valid'
+  | 'no_weight'
+  | 'multiple_weights';
+
+function extractWeights(text: string): WeightMatch[] {
+  const matches: WeightMatch[] = [];
 
   const regex =
     /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|g|grams?|lb|lbs|pounds?)(?![a-z])/gi;
@@ -49,152 +56,245 @@ function extractWeights(text: string) {
   return matches;
 }
 
+function getUniqueWeights(matches: WeightMatch[]): WeightMatch[] {
+  const unique = new Map<number, WeightMatch>();
+
+  for (const match of matches) {
+    if (!unique.has(match.grams)) {
+      unique.set(match.grams, match);
+    }
+  }
+
+  return [...unique.values()];
+}
+
+function getDiagnosticReason(
+  matches: WeightMatch[],
+): DiagnosticReason {
+  const uniqueWeights = getUniqueWeights(matches);
+
+  if (uniqueWeights.length === 0) {
+    return 'no_weight';
+  }
+
+  if (uniqueWeights.length > 1) {
+    return 'multiple_weights';
+  }
+
+  return 'valid';
+}
+
 router.post(
   '/import-product-weights',
   asyncHandler(async (req, res) => {
-    const SCAN_BATCH_SIZE = 1000;
+    const DEFAULT_BATCH_SIZE = 1000;
+    const MAX_BATCH_SIZE = 1000;
 
-    // Stop this HTTP request after enough work has been done.
-    // This prevents Railway timeouts.
-    const MAX_SCANNED_PER_REQUEST = 10000;
-    const MAX_UPDATES_PER_REQUEST = 1000;
+    const rawLimit = Number(req.query.limit);
 
-    let scanned = 0;
-    let updated = 0;
-    let skipped = 0;
+    const BATCH_SIZE =
+      Number.isFinite(rawLimit) && rawLimit > 0
+        ? Math.min(Math.floor(rawLimit), MAX_BATCH_SIZE)
+        : DEFAULT_BATCH_SIZE;
 
-    let cursor =
+    const afterId =
       typeof req.query.afterId === 'string'
         ? req.query.afterId
         : undefined;
 
-    let lastScannedId: string | undefined;
+    const dryRun =
+      req.query.dryRun === 'true' ||
+      req.query.dryRun === '1';
 
-    while (
-      scanned < MAX_SCANNED_PER_REQUEST &&
-      updated < MAX_UPDATES_PER_REQUEST
-    ) {
-      const products = await prisma.product.findMany({
-        where: {
-          status: 'ACTIVE',
-          weightGrams: null,
+    const diagnostic =
+      req.query.diagnostic === 'true' ||
+      req.query.diagnostic === '1';
 
-          ...(cursor
-            ? {
-                id: {
-                  gt: cursor,
-                },
-              }
-            : {}),
-        },
+    const products = await prisma.product.findMany({
+      where: {
+        status: 'ACTIVE',
+        weightGrams: null,
+        ...(afterId
+          ? {
+              id: {
+                gt: afterId,
+              },
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        description: true,
+        weightGrams: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+      take: BATCH_SIZE,
+    });
 
-        select: {
-          id: true,
-          sku: true,
-          name: true,
-          description: true,
-        },
+    let updated = 0;
+    let skipped = 0;
+    let valid = 0;
+    let noWeight = 0;
+    let multipleWeights = 0;
 
-        orderBy: {
-          id: 'asc',
-        },
+    const validExamples: Array<{
+      id: string;
+      sku: string;
+      name: string;
+      detected: string;
+      grams: number;
+    }> = [];
 
-        take: SCAN_BATCH_SIZE,
-      });
+    const noWeightExamples: Array<{
+      id: string;
+      sku: string;
+      name: string;
+    }> = [];
 
-      if (products.length === 0) {
-        break;
-      }
+    const multipleWeightExamples: Array<{
+      id: string;
+      sku: string;
+      name: string;
+      detected: string[];
+      grams: number[];
+    }> = [];
 
-      for (const product of products) {
-        scanned++;
-        lastScannedId = product.id;
+    for (const product of products) {
+      const text =
+        `${product.name}\n${product.description || ''}`;
 
-        const text =
-          `${product.name}\n${product.description || ''}`;
+      const matches = extractWeights(text);
+      const uniqueWeights = getUniqueWeights(matches);
+      const reason = getDiagnosticReason(matches);
 
-        const matches = extractWeights(text);
+      if (reason === 'no_weight') {
+        noWeight++;
+        skipped++;
 
-        /*
-         * IMPORTANT:
-         *
-         * Use the FIRST detected weight, exactly like
-         * the read-only scanner.
-         *
-         * Do NOT reject products merely because multiple
-         * weight-looking values exist.
-         */
-        const first = matches[0];
-
-        if (!first) {
-          skipped++;
-          continue;
+        if (diagnostic && noWeightExamples.length < 20) {
+          noWeightExamples.push({
+            id: product.id,
+            sku: product.sku,
+            name: product.name,
+          });
         }
 
+        continue;
+      }
+
+      if (reason === 'multiple_weights') {
+        multipleWeights++;
+        skipped++;
+
+        if (
+          diagnostic &&
+          multipleWeightExamples.length < 20
+        ) {
+          multipleWeightExamples.push({
+            id: product.id,
+            sku: product.sku,
+            name: product.name,
+            detected: matches.map((match) => match.raw),
+            grams: matches.map((match) => match.grams),
+          });
+        }
+
+        continue;
+      }
+
+      const selectedWeight = uniqueWeights[0];
+
+      if (!selectedWeight) {
+        skipped++;
+        continue;
+      }
+
+      valid++;
+
+      if (validExamples.length < 20) {
+        validExamples.push({
+          id: product.id,
+          sku: product.sku,
+          name: product.name,
+          detected: selectedWeight.raw,
+          grams: selectedWeight.grams,
+        });
+      }
+
+      if (!dryRun) {
         await prisma.product.update({
           where: {
             id: product.id,
           },
           data: {
-            weightGrams: first.grams,
+            weightGrams: selectedWeight.grams,
           },
         });
 
         updated++;
-
-        if (updated >= MAX_UPDATES_PER_REQUEST) {
-          break;
-        }
-
-        if (scanned >= MAX_SCANNED_PER_REQUEST) {
-          break;
-        }
       }
-
-      if (products.length < SCAN_BATCH_SIZE) {
-        break;
-      }
-
-      if (!lastScannedId) {
-        break;
-      }
-
-      cursor = lastScannedId;
     }
+
+    const lastProduct = products.at(-1);
 
     const remaining = await prisma.product.count({
       where: {
         status: 'ACTIVE',
         weightGrams: null,
-      },
-    });
-
-    const withWeight = await prisma.product.count({
-      where: {
-        status: 'ACTIVE',
-        weightGrams: {
-          not: null,
-        },
+        ...(lastProduct
+          ? {
+              id: {
+                gt: lastProduct.id,
+              },
+            }
+          : {}),
       },
     });
 
     res.json({
       success: true,
-      databaseModified: updated > 0,
 
-      scanned,
+      dryRun,
+      diagnostic,
+
+      databaseModified: !dryRun && updated > 0,
+
+      scanned: products.length,
+
+      valid,
       updated,
       skipped,
 
-      productsWithWeight: withWeight,
-      remainingProductsWithoutWeight: remaining,
+      skipReasons: {
+        noWeight,
+        multipleWeights,
+      },
 
-      lastId: lastScannedId ?? null,
+      lastId: lastProduct?.id ?? null,
+
+      remainingAfterThisBatch: remaining,
+
+      examples: {
+        valid: validExamples,
+
+        ...(diagnostic
+          ? {
+              noWeight: noWeightExamples,
+              multipleWeights: multipleWeightExamples,
+            }
+          : {}),
+      },
 
       message:
-        remaining === 0
-          ? 'All active products now have weights.'
-          : 'Batch completed. Run again using lastId.',
+        products.length === 0
+          ? 'No more products in this range.'
+          : dryRun
+            ? 'Dry run completed. No database changes were made.'
+            : 'Batch completed. Run again using lastId.',
     });
   }),
 );
