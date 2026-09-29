@@ -4,12 +4,13 @@ import { asyncHandler } from '../../lib/async-handler';
 
 const router = Router();
 
-function extractWeight(text: string) {
+function extractWeight(text: string): number | null {
+  // Intentionally ignore bare "g"/"G" because automotive descriptions
+  // commonly use G for product/spec designations.
   const regex =
-    /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|g|grams?|lb|lbs|pounds?)(?![a-z])/gi;
+    /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|grams?|lb|lbs|pounds?)(?![a-z])/gi;
 
   const matches = [...text.matchAll(regex)];
-
   const weights: number[] = [];
 
   for (const match of matches) {
@@ -37,141 +38,105 @@ function extractWeight(text: string) {
       grams = value;
     }
 
-    if (grams <= 0 || grams > 100000) continue;
+    if (grams < 2 || grams > 100000) continue;
 
     weights.push(Math.round(grams));
   }
 
-  return weights;
-}
-
-function isLikelyWeight(text: string, weights: number[]) {
-  if (weights.length === 0) return false;
-
-  /*
-   * Ignore values that are very likely specifications rather
-   * than weights when they use a bare "G" notation.
-   */
-  const hasRealWeightUnit =
-    /\d+(?:\.\d+)?\s*(?:kg|kilograms?|grams?|lb|lbs|pounds?)(?![a-z])/i.test(
-      text,
-    );
-
-  if (!hasRealWeightUnit) return false;
-
-  /*
-   * If multiple different weights occur in the description,
-   * don't automatically choose one.
-   */
   const uniqueWeights = [...new Set(weights)];
 
-  if (uniqueWeights.length > 1) return false;
+  // Only automatically import if there is exactly ONE weight
+  // in the product data.
+  if (uniqueWeights.length !== 1) {
+    return null;
+  }
 
-  const grams = uniqueWeights[0];
-
-  if (grams === undefined) return false;
-
-  /*
-   * Allow everything from tiny components to very heavy
-   * automotive equipment.
-   */
-  if (grams < 2) return false;
-  if (grams > 100000) return false;
-
-  return true;
+  return uniqueWeights[0] ?? null;
 }
 
 router.post(
   '/import-product-weights',
   asyncHandler(async (_req, res) => {
-    const BATCH_SIZE = 500;
+    const LIMIT = 500;
 
-    let cursor: string | undefined;
+    const products = await prisma.product.findMany({
+      where: {
+        status: 'ACTIVE',
+        weightGrams: null,
+      },
+      select: {
+        id: true,
+        sku: true,
+        name: true,
+        description: true,
+      },
+      orderBy: {
+        id: 'asc',
+      },
+      take: LIMIT,
+    });
 
-    let scanned = 0;
     let updated = 0;
     let skipped = 0;
 
-    while (true) {
-      const products = await prisma.product.findMany({
-        where: {
-          status: 'ACTIVE',
-          weightGrams: null,
-        },
-        select: {
-          id: true,
-          sku: true,
-          name: true,
-          description: true,
-        },
-        orderBy: {
-          id: 'asc',
-        },
-        take: BATCH_SIZE,
-        ...(cursor
-          ? {
-              skip: 1,
-              cursor: {
-                id: cursor,
-              },
-            }
-          : {}),
-      });
+    const updates: Array<{
+      id: string;
+      weightGrams: number;
+    }> = [];
 
-      if (products.length === 0) break;
+    for (const product of products) {
+      const text = `${product.name}\n${product.description || ''}`;
 
-      for (const product of products) {
-        scanned++;
+      const weightGrams = extractWeight(text);
 
-        const text = `${product.name}\n${product.description || ''}`;
-
-        const weights = extractWeight(text);
-
-        if (!isLikelyWeight(text, weights)) {
-          skipped++;
-          continue;
-        }
-
-        const weight = [...new Set(weights)][0];
-
-        if (weight === undefined) {
-          skipped++;
-          continue;
-        }
-
-        await prisma.product.update({
-          where: {
-            id: product.id,
-          },
-          data: {
-            weightGrams: weight,
-          },
-        });
-
-        updated++;
+      if (weightGrams === null) {
+        skipped++;
+        continue;
       }
 
-      const last = products[products.length - 1];
+      updates.push({
+        id: product.id,
+        weightGrams,
+      });
+    }
 
-      if (!last) break;
-
-      cursor = last.id;
-
-      console.log(
-        `Weight import: ${scanned.toLocaleString()} scanned, ` +
-          `${updated.toLocaleString()} updated, ` +
-          `${skipped.toLocaleString()} skipped`,
+    // Update in one database transaction instead of thousands
+    // of separate requests.
+    if (updates.length > 0) {
+      await prisma.$transaction(
+        updates.map((item) =>
+          prisma.product.update({
+            where: {
+              id: item.id,
+            },
+            data: {
+              weightGrams: item.weightGrams,
+            },
+          }),
+        ),
       );
 
-      if (products.length < BATCH_SIZE) break;
+      updated = updates.length;
     }
+
+    const remaining = await prisma.product.count({
+      where: {
+        status: 'ACTIVE',
+        weightGrams: null,
+      },
+    });
 
     res.json({
       success: true,
-      scanned,
+      databaseModified: true,
+      processed: products.length,
       updated,
       skipped,
-      databaseModified: true,
+      remainingProductsWithoutWeight: remaining,
+      message:
+        remaining > 0
+          ? 'Run this endpoint again to process the next batch.'
+          : 'All eligible products have been processed.',
     });
   }),
 );
