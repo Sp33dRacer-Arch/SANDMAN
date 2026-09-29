@@ -5,15 +5,22 @@ import { asyncHandler } from '../../lib/async-handler';
 const router = Router();
 
 function extractWeight(text: string): number | null {
-  // Ignore bare "g"/"G" because automotive specs often use G
-  // for things that are NOT product weight.
-  const regex =
-    /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|grams?|lb|lbs|pounds?)(?![a-z])/gi;
-
-  const matches = [...text.matchAll(regex)];
   const weights: number[] = [];
 
-  for (const match of matches) {
+  /*
+   * Explicit weight units.
+   *
+   * These are safe because they spell out the unit:
+   * lb, lbs, pound, pounds
+   * kg, kilogram, kilograms
+   * g, gram, grams
+   *
+   * Bare uppercase "G" is intentionally NOT accepted.
+   */
+  const explicitRegex =
+    /(\d+(?:\.\d+)?)\s*[-]?\s*(kg|kilograms?|grams?|lb|lbs|pounds?)(?![a-z])/gi;
+
+  for (const match of text.matchAll(explicitRegex)) {
     const valueText = match[1];
     const unitText = match[2];
 
@@ -38,18 +45,60 @@ function extractWeight(text: string): number | null {
       grams = value;
     }
 
-    if (grams < 2 || grams > 100000) continue;
+    if (grams <= 0 || grams > 100000) continue;
 
     weights.push(Math.round(grams));
   }
 
+  /*
+   * Also accept lowercase compact gram notation such as:
+   *
+   * 2g
+   * 9g
+   * 118g
+   *
+   * But deliberately reject:
+   *
+   * 2G
+   * 5G
+   * 14G
+   *
+   * because those commonly represent automotive specifications.
+   */
+  const compactGramRegex =
+    /(\d+(?:\.\d+)?)\s*g(?![a-zA-Z])/g;
+
+  for (const match of text.matchAll(compactGramRegex)) {
+    const valueText = match[1];
+
+    if (!valueText) continue;
+
+    const value = Number(valueText);
+
+    if (!Number.isFinite(value) || value <= 0) continue;
+
+    if (value > 100000) continue;
+
+    weights.push(Math.round(value));
+  }
+
   const uniqueWeights = [...new Set(weights)];
 
+  /*
+   * If the product description contains multiple different
+   * weights, don't guess which one is the shipping weight.
+   */
   if (uniqueWeights.length !== 1) {
     return null;
   }
 
-  return uniqueWeights[0] ?? null;
+  const weight = uniqueWeights[0];
+
+  if (weight === undefined) {
+    return null;
+  }
+
+  return weight;
 }
 
 router.post(
@@ -58,13 +107,18 @@ router.post(
     const SCAN_BATCH = 5000;
     const UPDATE_BATCH = 500;
 
-    let cursor: string | undefined;
-
     let scanned = 0;
     let updated = 0;
     let skipped = 0;
 
     while (true) {
+      /*
+       * IMPORTANT:
+       *
+       * Always start from the first remaining product.
+       * Do not use a cursor here because products are being
+       * removed from the weightGrams:null result set as we update them.
+       */
       const products = await prisma.product.findMany({
         where: {
           status: 'ACTIVE',
@@ -80,17 +134,11 @@ router.post(
           id: 'asc',
         },
         take: SCAN_BATCH,
-        ...(cursor
-          ? {
-              skip: 1,
-              cursor: {
-                id: cursor,
-              },
-            }
-          : {}),
       });
 
-      if (products.length === 0) break;
+      if (products.length === 0) {
+        break;
+      }
 
       const updates: Array<{
         id: string;
@@ -100,7 +148,9 @@ router.post(
       for (const product of products) {
         scanned++;
 
-        const text = `${product.name}\n${product.description || ''}`;
+        const text =
+          `${product.name}\n${product.description || ''}`;
+
         const weightGrams = extractWeight(text);
 
         if (weightGrams === null) {
@@ -114,6 +164,9 @@ router.post(
         });
       }
 
+      /*
+       * Update in manageable transactions.
+       */
       for (let i = 0; i < updates.length; i += UPDATE_BATCH) {
         const batch = updates.slice(i, i + UPDATE_BATCH);
 
@@ -133,17 +186,19 @@ router.post(
         updated += batch.length;
       }
 
-      const last = products[products.length - 1];
-
-      if (!last) break;
-
-      cursor = last.id;
-
       console.log(
-        `Weight import: ${scanned} scanned, ${updated} updated, ${skipped} skipped`,
+        `Weight import progress: ` +
+          `${scanned.toLocaleString()} scanned, ` +
+          `${updated.toLocaleString()} updated, ` +
+          `${skipped.toLocaleString()} skipped`,
       );
 
-      if (products.length < SCAN_BATCH) break;
+      /*
+       * If fewer than SCAN_BATCH remain, we're finished.
+       */
+      if (products.length < SCAN_BATCH) {
+        break;
+      }
     }
 
     const remaining = await prisma.product.count({
@@ -153,17 +208,27 @@ router.post(
       },
     });
 
+    const withWeight = await prisma.product.count({
+      where: {
+        status: 'ACTIVE',
+        weightGrams: {
+          not: null,
+        },
+      },
+    });
+
     res.json({
       success: true,
       databaseModified: true,
       scanned,
       updated,
       skipped,
+      productsWithWeight: withWeight,
       remainingProductsWithoutWeight: remaining,
       message:
         remaining > 0
           ? 'Run again to continue.'
-          : 'Finished processing all active products.',
+          : 'All active products now have a weight.',
     });
   }),
 );
